@@ -56,6 +56,12 @@ def reader(port, args) -> None:
                 continue
             if raw:
                 raw.write(data)
+            # 应答终端探针（与 idf.py monitor 一致）：设备 console 依赖它启用行编辑，
+            # 否则打印 "terminal does not support escape sequences" 并禁用。
+            if b"\x1b[6n" in data:
+                port.write(b"\x1b[1;1R")
+            elif b"\x1b[5n" in data:
+                port.write(b"\x1b[0n")
             if plain:
                 buf += data
                 while b"\n" in buf:

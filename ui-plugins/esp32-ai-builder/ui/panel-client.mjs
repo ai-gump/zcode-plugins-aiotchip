@@ -190,15 +190,16 @@ function escapeHtml(text) {
   return text.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
 }
 
-/** SGR 序列 → span class 流。只处理颜色/加粗，其余序列丢弃。 */
+/** ANSI 序列 → span class 流。SGR 处理颜色/加粗，其余控制序列（光标、DSR 探针等）吞掉。 */
 function ansiToHtml(data) {
   let html = "";
   let open = 0;
   let fg = null;
   let pos = 0;
-  for (const match of data.matchAll(/\x1b\[([0-9;]*)m/g)) {
+  for (const match of data.matchAll(/\x1b\[([0-9;?]*)[ -\/]*[@-~]/g)) {
     html += escapeHtml(data.slice(pos, match.index));
     pos = match.index + match[0].length;
+    if (match[0].endsWith("m")) {
     const codes = (match[1] || "0").split(";").map((n) => Number(n) || 0);
     for (const code of codes) {
       if (code === 0) {
@@ -213,6 +214,7 @@ function ansiToHtml(data) {
       } else if (code === 39) {
         fg = null;
       }
+    }
     }
   }
   html += escapeHtml(data.slice(pos));
