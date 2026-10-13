@@ -141,3 +141,31 @@ body[data-theme="light"] .lv-E { color: #cf222e; }
 body[data-theme="light"] .lv-W { color: #9a6700; }
 body[data-theme="light"] .lv-I { color: #1a7f37; }
 body[data-theme="light"] .lv-D { color: #0969da; }
+
+.modal-overlay {
+  position: fixed; inset: 0; z-index: 30; display: flex;
+  align-items: center; justify-content: center; background: rgba(0, 0, 0, 0.45);
+}
+.modal-overlay[hidden] { display: none; }
+.modal-card {
+  background: var(--card); border: 1px solid var(--line); border-radius: 10px;
+  padding: 14px 16px; max-width: 320px; font-size: 13px;
+}
+.modal-card p { margin: 0 0 10px; }
+.modal-btns { display: flex; gap: 8px; justify-content: flex-end; }
+
+.pick-row { display: flex; gap: 6px; width: 100%; }
+.pick-row input { flex: 1; min-width: 0; }
+.dir-card { width: min(480px, 92vw); }
+.dir-card .row { margin: 6px 0; }
+.dir-card .row input { flex: 1; min-width: 0; }
+.dir-list {
+  border: 1px solid var(--line); border-radius: 6px; background: var(--bg);
+  max-height: 220px; overflow-y: auto; margin: 6px 0;
+}
+.dir-item {
+  display: block; width: 100%; text-align: left; background: none; border: none;
+  color: var(--fg); padding: 6px 10px; cursor: pointer; font: inherit;
+}
+.dir-item:hover { background: var(--line); }
+.dir-btns { margin-top: 4px; }

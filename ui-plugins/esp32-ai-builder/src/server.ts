@@ -3,7 +3,7 @@
 // V1 范围（esp32-plugin-plan.md 定稿）：ESP32-S3 + ESP-IDF v5.5，macOS/Linux。
 // 环境搭建（检测/受控安装）、项目创建、编译、烧录、串口监视；调试暂不排期（D5）。
 // stdout 只输出 MCP 协议消息；诊断日志走 stderr。
-import { mkdir, readFile } from "node:fs/promises";
+import { mkdir, readdir, readFile } from "node:fs/promises";
 import { existsSync } from "node:fs";
 import { basename, dirname, isAbsolute, join } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -43,7 +43,7 @@ import {
 } from "./idf";
 import { listSerialPorts } from "./serial";
 
-const PLUGIN_VERSION = "0.4.7";
+const PLUGIN_VERSION = "0.4.8";
 const HTML_MIME = "text/html;profile=mcp-app";
 const DIST_DIR = dirname(fileURLToPath(import.meta.url));
 
@@ -59,8 +59,8 @@ function resolveProjectDir(project: string): string {
   const dir = isAbsolute(project) ? project : join(workspaceRoot, project);
   if (!existsSync(join(dir, "CMakeLists.txt"))) {
     throw new Error(
-      `Project directory not found or missing CMakeLists.txt: ${dir}。` +
-        "先用 esp32_create_project 创建，或传入包含 CMakeLists.txt 的目录。",
+      `项目目录不存在或缺少 CMakeLists.txt：${dir}。` +
+        "可先用 esp32_create_project 创建，或在面板“项目目录”下拉里选择已发现的项目。",
     );
   }
   return dir;
@@ -341,6 +341,72 @@ server.registerTool(
         },
       ],
       structuredContent: { projectDir: dest, template: "hello_world", next: ["esp32_set_target", "esp32_build"] },
+    };
+  },
+);
+
+server.registerTool(
+  "esp32_list_projects",
+  {
+    title: "List ESP32 projects in the workspace",
+    description:
+      "List ESP-IDF projects under the workspace root (directories containing CMakeLists.txt), " +
+      "up to two levels deep. Use it to pick a project for set-target/build/flash. " +
+      "Pass root to scan a local folder chosen in the panel browser; defaults to the session workspace.",
+    inputSchema: {
+      root: z.string().optional().describe("Folder to scan (absolute path); defaults to the session workspace"),
+    },
+    _meta: { ui: { visibility: ["app"] } },
+  },
+  async ({ root }) => {
+    const SKIP = new Set(["build", "log", "node_modules", "dist", "managed_components", "dependencies.lock"]);
+    const base = root?.trim() || workspaceRoot;
+    if (!existsSync(base)) throw new Error(`扫描根目录不存在：${base}`);
+    const projects: string[] = [];
+    async function scan(dir: string, depth: number): Promise<void> {
+      if (existsSync(join(dir, "CMakeLists.txt"))) {
+        projects.push(dir);
+        return;
+      }
+      if (depth <= 0) return;
+      for (const entry of await readdir(dir, { withFileTypes: true })) {
+        if (!entry.isDirectory() || entry.name.startsWith(".") || SKIP.has(entry.name)) continue;
+        await scan(join(dir, entry.name), depth - 1);
+      }
+    }
+    await scan(base, 2);
+    projects.sort();
+    return {
+      content: [{ type: "text", text: `在 ${base} 下发现 ${projects.length} 个项目。` }],
+      structuredContent: { root: base, workspaceRoot, projects },
+    };
+  },
+);
+
+server.registerTool(
+  "esp32_list_dir",
+  {
+    title: "Browse local folders",
+    description:
+      "List subdirectories of a local folder for the panel's project-folder browser. " +
+      "Read-only; hidden and build directories are skipped. Defaults to the session workspace.",
+    inputSchema: {
+      path: z.string().optional().describe("Folder to list; defaults to the session workspace"),
+    },
+    _meta: { ui: { visibility: ["app"] } },
+  },
+  async ({ path: raw }) => {
+    const dir = raw?.trim() || workspaceRoot;
+    if (!existsSync(dir)) throw new Error(`目录不存在：${dir}`);
+    const entries = await readdir(dir, { withFileTypes: true });
+    const directories = entries
+      .filter((e) => e.isDirectory() && !e.name.startsWith("."))
+      .map((e) => e.name)
+      .sort();
+    const parent = dirname(dir);
+    return {
+      content: [{ type: "text", text: `${dir}：${directories.length} 个子目录` }],
+      structuredContent: { path: dir, parent: parent === dir ? null : parent, directories },
     };
   },
 );

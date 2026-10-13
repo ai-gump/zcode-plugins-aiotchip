@@ -34,8 +34,13 @@
       <!-- 构建管线 -->
       <section id="tab-pipeline" class="page" hidden>
         <div id="env-line" class="muted">检查环境中…</div>
-        <label class="row">项目目录（工作区相对名或绝对路径）
-          <input id="project" placeholder="hello_world" />
+        <div id="scan-root" class="muted">扫描位置：当前会话工作区</div>
+        <label class="row">项目目录（留空且仅发现一个项目时自动选中）
+          <span class="pick-row">
+            <input id="project" list="project-options" placeholder="点击选择或输入" />
+            <button id="btn-browse" type="button">浏览…</button>
+          </span>
+          <datalist id="project-options"></datalist>
         </label>
         <div class="row buttons">
           <button id="btn-settarget">set-target</button>
@@ -88,6 +93,32 @@
       </section>
     </main>
 
+    <div id="dir-modal" class="modal-overlay" hidden>
+      <div class="modal-card dir-card">
+        <p class="modal-title">选择项目所在的本地文件夹</p>
+        <div class="row">
+          <input id="dir-path" placeholder="/绝对/路径（可手动修改）" />
+          <button id="dir-go" type="button">跳转</button>
+        </div>
+        <div id="dir-list"></div>
+        <div class="modal-btns dir-btns">
+          <button id="dir-up" type="button">上级</button>
+          <button id="dir-home" type="button">会话工作区</button>
+          <span style="flex: 1"></span>
+          <button id="dir-cancel" type="button">取消</button>
+          <button id="dir-ok" class="primary" type="button">选此文件夹并扫描</button>
+        </div>
+      </div>
+    </div>
+    <div id="flash-modal" class="modal-overlay" hidden>
+      <div class="modal-card">
+        <p>烧录将<strong>覆写开发板 flash</strong>，确认继续？</p>
+        <div class="modal-btns">
+          <button id="flash-cancel">取消</button>
+          <button id="flash-ok" class="primary">确认烧录</button>
+        </div>
+      </div>
+    </div>
     <div id="sel-menu" hidden>
       <button data-act="task">添加到当前任务</button>
       <button data-act="ask">在辅助对话中提问</button>

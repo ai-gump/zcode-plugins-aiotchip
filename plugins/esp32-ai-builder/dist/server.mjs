@@ -6800,7 +6800,7 @@ var require_dist = __commonJS({
 });
 
 // src/server.ts
-import { mkdir as mkdir2, readFile as readFile2 } from "node:fs/promises";
+import { mkdir as mkdir2, readdir as readdir4, readFile as readFile2 } from "node:fs/promises";
 import { existsSync as existsSync3 } from "node:fs";
 import { basename, dirname, isAbsolute, join as join4 } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -36377,7 +36377,7 @@ async function listSerialPorts() {
 }
 
 // src/server.ts
-var PLUGIN_VERSION = "0.4.7";
+var PLUGIN_VERSION = "0.4.8";
 var HTML_MIME = "text/html;profile=mcp-app";
 var DIST_DIR = dirname(fileURLToPath(import.meta.url));
 var dataDir = process.env.ZCODE_PLUGIN_DATA?.trim() || join4(DIST_DIR, "data");
@@ -36389,7 +36389,7 @@ function resolveProjectDir(project) {
   const dir = isAbsolute(project) ? project : join4(workspaceRoot, project);
   if (!existsSync3(join4(dir, "CMakeLists.txt"))) {
     throw new Error(
-      `Project directory not found or missing CMakeLists.txt: ${dir}\u3002\u5148\u7528 esp32_create_project \u521B\u5EFA\uFF0C\u6216\u4F20\u5165\u5305\u542B CMakeLists.txt \u7684\u76EE\u5F55\u3002`
+      `\u9879\u76EE\u76EE\u5F55\u4E0D\u5B58\u5728\u6216\u7F3A\u5C11 CMakeLists.txt\uFF1A${dir}\u3002\u53EF\u5148\u7528 esp32_create_project \u521B\u5EFA\uFF0C\u6216\u5728\u9762\u677F\u201C\u9879\u76EE\u76EE\u5F55\u201D\u4E0B\u62C9\u91CC\u9009\u62E9\u5DF2\u53D1\u73B0\u7684\u9879\u76EE\u3002`
     );
   }
   return dir;
@@ -36617,6 +36617,62 @@ server.registerTool(
         }
       ],
       structuredContent: { projectDir: dest, template: "hello_world", next: ["esp32_set_target", "esp32_build"] }
+    };
+  }
+);
+server.registerTool(
+  "esp32_list_projects",
+  {
+    title: "List ESP32 projects in the workspace",
+    description: "List ESP-IDF projects under the workspace root (directories containing CMakeLists.txt), up to two levels deep. Use it to pick a project for set-target/build/flash. Pass root to scan a local folder chosen in the panel browser; defaults to the session workspace.",
+    inputSchema: {
+      root: external_exports.string().optional().describe("Folder to scan (absolute path); defaults to the session workspace")
+    },
+    _meta: { ui: { visibility: ["app"] } }
+  },
+  async ({ root }) => {
+    const SKIP = /* @__PURE__ */ new Set(["build", "log", "node_modules", "dist", "managed_components", "dependencies.lock"]);
+    const base = root?.trim() || workspaceRoot;
+    if (!existsSync3(base)) throw new Error(`\u626B\u63CF\u6839\u76EE\u5F55\u4E0D\u5B58\u5728\uFF1A${base}`);
+    const projects = [];
+    async function scan(dir, depth) {
+      if (existsSync3(join4(dir, "CMakeLists.txt"))) {
+        projects.push(dir);
+        return;
+      }
+      if (depth <= 0) return;
+      for (const entry of await readdir4(dir, { withFileTypes: true })) {
+        if (!entry.isDirectory() || entry.name.startsWith(".") || SKIP.has(entry.name)) continue;
+        await scan(join4(dir, entry.name), depth - 1);
+      }
+    }
+    await scan(base, 2);
+    projects.sort();
+    return {
+      content: [{ type: "text", text: `\u5728 ${base} \u4E0B\u53D1\u73B0 ${projects.length} \u4E2A\u9879\u76EE\u3002` }],
+      structuredContent: { root: base, workspaceRoot, projects }
+    };
+  }
+);
+server.registerTool(
+  "esp32_list_dir",
+  {
+    title: "Browse local folders",
+    description: "List subdirectories of a local folder for the panel's project-folder browser. Read-only; hidden and build directories are skipped. Defaults to the session workspace.",
+    inputSchema: {
+      path: external_exports.string().optional().describe("Folder to list; defaults to the session workspace")
+    },
+    _meta: { ui: { visibility: ["app"] } }
+  },
+  async ({ path: raw }) => {
+    const dir = raw?.trim() || workspaceRoot;
+    if (!existsSync3(dir)) throw new Error(`\u76EE\u5F55\u4E0D\u5B58\u5728\uFF1A${dir}`);
+    const entries = await readdir4(dir, { withFileTypes: true });
+    const directories = entries.filter((e) => e.isDirectory() && !e.name.startsWith(".")).map((e) => e.name).sort();
+    const parent = dirname(dir);
+    return {
+      content: [{ type: "text", text: `${dir}\uFF1A${directories.length} \u4E2A\u5B50\u76EE\u5F55` }],
+      structuredContent: { path: dir, parent: parent === dir ? null : parent, directories }
     };
   }
 );

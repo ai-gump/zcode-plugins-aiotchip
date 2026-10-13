@@ -130,6 +130,97 @@ async function refreshEnv() {
   }
 }
 
+let workspaceProjects = [];
+let scanRoot = null; // null = 当前会话工作区
+let sessionWorkspace = null;
+
+async function loadProjects() {
+  try {
+    const data = await call("esp32_list_projects", scanRoot ? { root: scanRoot } : {});
+    workspaceProjects = data.projects ?? [];
+    sessionWorkspace = data.workspaceRoot ?? sessionWorkspace;
+  } catch {
+    workspaceProjects = [];
+  }
+  $("scan-root").textContent = `扫描位置：${scanRoot ?? sessionWorkspace ?? "当前会话工作区"}`;
+  $("project-options").innerHTML = workspaceProjects
+    .map((p) => `<option value="${p}"></option>`)
+    .join("");
+  $("project-options").innerHTML = workspaceProjects
+    .map((p) => `<option value="${p}"></option>`)
+    .join("");
+  if (!$("project").value.trim()) {
+    let saved = null;
+    try {
+      saved = localStorage.getItem("esp32.lastProject");
+    } catch {}
+    const match = saved && workspaceProjects.find((p) => p === saved || p.endsWith(`/${saved}`));
+    if (match) $("project").value = match;
+    else if (workspaceProjects.length === 1) $("project").value = workspaceProjects[0];
+  }
+}
+
+/* ---------- 文件夹浏览器（沙箱内自绘，宿主不允许原生目录选择框） ---------- */
+
+let dirNavPath = null;
+
+async function openDirModal() {
+  dirNavPath = scanRoot || sessionWorkspace;
+  $("dir-modal").hidden = false;
+  await renderDir(dirNavPath);
+}
+
+async function renderDir(path) {
+  await guard(async () => {
+    const data = await call("esp32_list_dir", { path });
+    dirNavPath = data.path;
+    $("dir-path").value = data.path;
+    const list = $("dir-list");
+    list.innerHTML = data.directories.length
+      ? ""
+      : '<div class="muted" style="padding: 6px 10px">（无子目录）</div>';
+    for (const name of data.directories) {
+      const btn = document.createElement("button");
+      btn.type = "button";
+      btn.className = "dir-item";
+      btn.textContent = `📁 ${name}`;
+      btn.onclick = () => renderDir(data.path.endsWith("/") ? data.path + name : `${data.path}/${name}`);
+      list.appendChild(btn);
+    }
+  });
+}
+
+$("btn-browse").onclick = openDirModal;
+$("dir-go").onclick = () => renderDir($("dir-path").value.trim());
+$("dir-up").onclick = () => {
+  if (dirNavPath) renderDir(dirNavPath);
+};
+$("dir-home").onclick = () => renderDir(sessionWorkspace ?? "");
+$("dir-cancel").onclick = () => ($("dir-modal").hidden = true);
+$("dir-ok").onclick = () =>
+  guard(async () => {
+    scanRoot = dirNavPath;
+    $("dir-modal").hidden = true;
+    await loadProjects();
+  });
+
+function currentProject() {
+  const value = $("project").value.trim();
+  if (value) return value;
+  if (workspaceProjects.length === 1) return workspaceProjects[0];
+  throw new Error(
+    workspaceProjects.length
+      ? `工作区发现 ${workspaceProjects.length} 个项目，请在“项目目录”里选择一个`
+      : "工作区未发现 ESP32 项目（含 CMakeLists.txt 的目录）；可先创建项目",
+  );
+}
+
+function rememberProject(project) {
+  try {
+    localStorage.setItem("esp32.lastProject", project);
+  } catch {}
+}
+
 async function startJobTool(name, args, title) {
   const data = await call(name, args);
   job = { id: data.jobId, status: "running" };
@@ -143,19 +234,38 @@ async function startJobTool(name, args, title) {
 
 $("btn-refresh-env").onclick = refreshEnv;
 $("btn-settarget").onclick = () =>
-  guard(() => startJobTool("esp32_set_target", { project: $("project").value.trim(), target: "esp32s3" }, "set-target"));
+  guard(() => {
+    const project = currentProject();
+    $("project").value = project;
+    rememberProject(project);
+    return startJobTool("esp32_set_target", { project, target: "esp32s3" }, "set-target");
+  });
 $("btn-build").onclick = () =>
-  guard(() => startJobTool("esp32_build", { project: $("project").value.trim() }, "编译"));
-$("btn-flash").onclick = async () => {
-  if (!confirm("烧录将覆写开发板 flash，确认继续？")) return;
-  await guard(() =>
-    startJobTool(
+  guard(() => {
+    const project = currentProject();
+    $("project").value = project;
+    rememberProject(project);
+    return startJobTool("esp32_build", { project }, "编译");
+  });
+// iframe 沙箱会拦截原生 confirm()（静默返回 false），烧录确认用面板自绘弹窗
+let pendingFlashProject = null;
+$("btn-flash").onclick = () =>
+  guard(() => {
+    pendingFlashProject = currentProject();
+    $("project").value = pendingFlashProject;
+    $("flash-modal").hidden = false;
+  });
+$("flash-cancel").onclick = () => ($("flash-modal").hidden = true);
+$("flash-ok").onclick = () =>
+  guard(async () => {
+    $("flash-modal").hidden = true;
+    rememberProject(pendingFlashProject);
+    await startJobTool(
       "esp32_flash",
-      { project: $("project").value.trim(), port: $("port").value || undefined },
+      { project: pendingFlashProject, port: $("port").value || undefined },
       "烧录",
-    ),
-  );
-};
+    );
+  });
 
 async function pollJob() {
   if (!job) return;
@@ -540,7 +650,10 @@ for (const tab of document.querySelectorAll(".tab")) {
   tab.onclick = () => {
     for (const t of document.querySelectorAll(".tab")) t.classList.toggle("active", t === tab);
     for (const page of document.querySelectorAll(".page")) page.hidden = page.id !== `tab-${tab.dataset.tab}`;
-    if (tab.dataset.tab === "pipeline") refreshEnv();
+    if (tab.dataset.tab === "pipeline") {
+      refreshEnv();
+      loadProjects();
+    }
   };
 }
 

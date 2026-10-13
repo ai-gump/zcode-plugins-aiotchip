@@ -149,6 +149,34 @@ body[data-theme="light"] .lv-W { color: #9a6700; }
 body[data-theme="light"] .lv-I { color: #1a7f37; }
 body[data-theme="light"] .lv-D { color: #0969da; }
 
+.modal-overlay {
+  position: fixed; inset: 0; z-index: 30; display: flex;
+  align-items: center; justify-content: center; background: rgba(0, 0, 0, 0.45);
+}
+.modal-overlay[hidden] { display: none; }
+.modal-card {
+  background: var(--card); border: 1px solid var(--line); border-radius: 10px;
+  padding: 14px 16px; max-width: 320px; font-size: 13px;
+}
+.modal-card p { margin: 0 0 10px; }
+.modal-btns { display: flex; gap: 8px; justify-content: flex-end; }
+
+.pick-row { display: flex; gap: 6px; width: 100%; }
+.pick-row input { flex: 1; min-width: 0; }
+.dir-card { width: min(480px, 92vw); }
+.dir-card .row { margin: 6px 0; }
+.dir-card .row input { flex: 1; min-width: 0; }
+.dir-list {
+  border: 1px solid var(--line); border-radius: 6px; background: var(--bg);
+  max-height: 220px; overflow-y: auto; margin: 6px 0;
+}
+.dir-item {
+  display: block; width: 100%; text-align: left; background: none; border: none;
+  color: var(--fg); padding: 6px 10px; cursor: pointer; font: inherit;
+}
+.dir-item:hover { background: var(--line); }
+.dir-btns { margin-top: 4px; }
+
     </style>
   </head>
   <body data-theme="light">
@@ -177,8 +205,13 @@ body[data-theme="light"] .lv-D { color: #0969da; }
       <!-- 构建管线 -->
       <section id="tab-pipeline" class="page" hidden>
         <div id="env-line" class="muted">检查环境中…</div>
-        <label class="row">项目目录（工作区相对名或绝对路径）
-          <input id="project" placeholder="hello_world" />
+        <div id="scan-root" class="muted">扫描位置：当前会话工作区</div>
+        <label class="row">项目目录（留空且仅发现一个项目时自动选中）
+          <span class="pick-row">
+            <input id="project" list="project-options" placeholder="点击选择或输入" />
+            <button id="btn-browse" type="button">浏览…</button>
+          </span>
+          <datalist id="project-options"></datalist>
         </label>
         <div class="row buttons">
           <button id="btn-settarget">set-target</button>
@@ -231,6 +264,32 @@ body[data-theme="light"] .lv-D { color: #0969da; }
       </section>
     </main>
 
+    <div id="dir-modal" class="modal-overlay" hidden>
+      <div class="modal-card dir-card">
+        <p class="modal-title">选择项目所在的本地文件夹</p>
+        <div class="row">
+          <input id="dir-path" placeholder="/绝对/路径（可手动修改）" />
+          <button id="dir-go" type="button">跳转</button>
+        </div>
+        <div id="dir-list"></div>
+        <div class="modal-btns dir-btns">
+          <button id="dir-up" type="button">上级</button>
+          <button id="dir-home" type="button">会话工作区</button>
+          <span style="flex: 1"></span>
+          <button id="dir-cancel" type="button">取消</button>
+          <button id="dir-ok" class="primary" type="button">选此文件夹并扫描</button>
+        </div>
+      </div>
+    </div>
+    <div id="flash-modal" class="modal-overlay" hidden>
+      <div class="modal-card">
+        <p>烧录将<strong>覆写开发板 flash</strong>，确认继续？</p>
+        <div class="modal-btns">
+          <button id="flash-cancel">取消</button>
+          <button id="flash-ok" class="primary">确认烧录</button>
+        </div>
+      </div>
+    </div>
     <div id="sel-menu" hidden>
       <button data-act="task">添加到当前任务</button>
       <button data-act="ask">在辅助对话中提问</button>
@@ -26952,6 +27011,80 @@ container holding the app. Specify either width or maxWidth, and either height o
       refreshInFlight = false;
     }
   }
+  var workspaceProjects = [];
+  var scanRoot = null;
+  var sessionWorkspace = null;
+  async function loadProjects() {
+    try {
+      const data = await call("esp32_list_projects", scanRoot ? { root: scanRoot } : {});
+      workspaceProjects = data.projects ?? [];
+      sessionWorkspace = data.workspaceRoot ?? sessionWorkspace;
+    } catch {
+      workspaceProjects = [];
+    }
+    $("scan-root").textContent = `\u626B\u63CF\u4F4D\u7F6E\uFF1A${scanRoot ?? sessionWorkspace ?? "\u5F53\u524D\u4F1A\u8BDD\u5DE5\u4F5C\u533A"}`;
+    $("project-options").innerHTML = workspaceProjects.map((p2) => `<option value="${p2}"></option>`).join("");
+    $("project-options").innerHTML = workspaceProjects.map((p2) => `<option value="${p2}"></option>`).join("");
+    if (!$("project").value.trim()) {
+      let saved = null;
+      try {
+        saved = localStorage.getItem("esp32.lastProject");
+      } catch {
+      }
+      const match = saved && workspaceProjects.find((p2) => p2 === saved || p2.endsWith(`/${saved}`));
+      if (match) $("project").value = match;
+      else if (workspaceProjects.length === 1) $("project").value = workspaceProjects[0];
+    }
+  }
+  var dirNavPath = null;
+  async function openDirModal() {
+    dirNavPath = scanRoot || sessionWorkspace;
+    $("dir-modal").hidden = false;
+    await renderDir(dirNavPath);
+  }
+  async function renderDir(path) {
+    await guard(async () => {
+      const data = await call("esp32_list_dir", { path });
+      dirNavPath = data.path;
+      $("dir-path").value = data.path;
+      const list = $("dir-list");
+      list.innerHTML = data.directories.length ? "" : '<div class="muted" style="padding: 6px 10px">\uFF08\u65E0\u5B50\u76EE\u5F55\uFF09</div>';
+      for (const name of data.directories) {
+        const btn = document.createElement("button");
+        btn.type = "button";
+        btn.className = "dir-item";
+        btn.textContent = `\u{1F4C1} ${name}`;
+        btn.onclick = () => renderDir(data.path.endsWith("/") ? data.path + name : `${data.path}/${name}`);
+        list.appendChild(btn);
+      }
+    });
+  }
+  $("btn-browse").onclick = openDirModal;
+  $("dir-go").onclick = () => renderDir($("dir-path").value.trim());
+  $("dir-up").onclick = () => {
+    if (dirNavPath) renderDir(dirNavPath);
+  };
+  $("dir-home").onclick = () => renderDir(sessionWorkspace ?? "");
+  $("dir-cancel").onclick = () => $("dir-modal").hidden = true;
+  $("dir-ok").onclick = () => guard(async () => {
+    scanRoot = dirNavPath;
+    $("dir-modal").hidden = true;
+    await loadProjects();
+  });
+  function currentProject() {
+    const value = $("project").value.trim();
+    if (value) return value;
+    if (workspaceProjects.length === 1) return workspaceProjects[0];
+    throw new Error(
+      workspaceProjects.length ? `\u5DE5\u4F5C\u533A\u53D1\u73B0 ${workspaceProjects.length} \u4E2A\u9879\u76EE\uFF0C\u8BF7\u5728\u201C\u9879\u76EE\u76EE\u5F55\u201D\u91CC\u9009\u62E9\u4E00\u4E2A` : "\u5DE5\u4F5C\u533A\u672A\u53D1\u73B0 ESP32 \u9879\u76EE\uFF08\u542B CMakeLists.txt \u7684\u76EE\u5F55\uFF09\uFF1B\u53EF\u5148\u521B\u5EFA\u9879\u76EE"
+    );
+  }
+  function rememberProject(project) {
+    try {
+      localStorage.setItem("esp32.lastProject", project);
+    } catch {
+    }
+  }
   async function startJobTool(name, args, title) {
     const data = await call(name, args);
     job = { id: data.jobId, status: "running" };
@@ -26963,18 +27096,34 @@ container holding the app. Specify either width or maxWidth, and either height o
     toast(`${title} \u5DF2\u542F\u52A8`);
   }
   $("btn-refresh-env").onclick = refreshEnv;
-  $("btn-settarget").onclick = () => guard(() => startJobTool("esp32_set_target", { project: $("project").value.trim(), target: "esp32s3" }, "set-target"));
-  $("btn-build").onclick = () => guard(() => startJobTool("esp32_build", { project: $("project").value.trim() }, "\u7F16\u8BD1"));
-  $("btn-flash").onclick = async () => {
-    if (!confirm("\u70E7\u5F55\u5C06\u8986\u5199\u5F00\u53D1\u677F flash\uFF0C\u786E\u8BA4\u7EE7\u7EED\uFF1F")) return;
-    await guard(
-      () => startJobTool(
-        "esp32_flash",
-        { project: $("project").value.trim(), port: $("port").value || void 0 },
-        "\u70E7\u5F55"
-      )
+  $("btn-settarget").onclick = () => guard(() => {
+    const project = currentProject();
+    $("project").value = project;
+    rememberProject(project);
+    return startJobTool("esp32_set_target", { project, target: "esp32s3" }, "set-target");
+  });
+  $("btn-build").onclick = () => guard(() => {
+    const project = currentProject();
+    $("project").value = project;
+    rememberProject(project);
+    return startJobTool("esp32_build", { project }, "\u7F16\u8BD1");
+  });
+  var pendingFlashProject = null;
+  $("btn-flash").onclick = () => guard(() => {
+    pendingFlashProject = currentProject();
+    $("project").value = pendingFlashProject;
+    $("flash-modal").hidden = false;
+  });
+  $("flash-cancel").onclick = () => $("flash-modal").hidden = true;
+  $("flash-ok").onclick = () => guard(async () => {
+    $("flash-modal").hidden = true;
+    rememberProject(pendingFlashProject);
+    await startJobTool(
+      "esp32_flash",
+      { project: pendingFlashProject, port: $("port").value || void 0 },
+      "\u70E7\u5F55"
     );
-  };
+  });
   async function pollJob() {
     if (!job) return;
     try {
@@ -27323,7 +27472,10 @@ ${truncated}` }]
     tab.onclick = () => {
       for (const t of document.querySelectorAll(".tab")) t.classList.toggle("active", t === tab);
       for (const page of document.querySelectorAll(".page")) page.hidden = page.id !== `tab-${tab.dataset.tab}`;
-      if (tab.dataset.tab === "pipeline") refreshEnv();
+      if (tab.dataset.tab === "pipeline") {
+        refreshEnv();
+        loadProjects();
+      }
     };
   }
   app.onteardown = () => {
