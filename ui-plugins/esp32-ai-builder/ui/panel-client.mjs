@@ -336,13 +336,59 @@ function ansiToHtml(data) {
 }
 
 /** 无 ANSI 时的兜底：按 ESP-IDF 日志级别前缀（I/W/E/D/V (毫秒)）整行着色。 */
+function detectLevel(line) {
+  const m = /(?:^|>\s*|\s)([VDIWE]) \(\d+\)/.exec(line) ?? /\b(ERROR|WARN)\b/.exec(line);
+  if (!m) return null;
+  const t = m[1];
+  return t === "ERROR" ? "E" : t === "WARN" ? "W" : t;
+}
+
 function fallbackToHtml(line) {
-  const m =
-    /(?:^|>\s*|\s)([VDIWE]) \(\d+\)/.exec(line) ?? /\b(ERROR|WARN)\b/.exec(line);
-  const cls = m ? (m[1] === "ERROR" ? "E" : m[1] === "WARN" ? "W" : m[1]) : null;
+  const cls = detectLevel(line);
   return cls && ["V", "D", "I", "W", "E"].includes(cls)
     ? `<span class="lv-${cls}">${escapeHtml(line)}</span>`
     : escapeHtml(line);
+}
+
+/* ---------- 日志缓冲 + 级别过滤 + 贴底跟随 ---------- */
+
+const logBuffer = []; // { level, html }
+const MAX_LOG_LINES = 5000;
+let logFollow = true;
+let domLineCount = 0;
+
+function linePasses(level) {
+  const f = { i: $("filter-i").checked, w: $("filter-w").checked, e: $("filter-e").checked };
+  if (!(f.i || f.w || f.e)) return true; // 全不勾 = 不过滤
+  if (level === null) return true; // 无级别的行（提示符/横幅）始终显示
+  return (f.i && level === "I") || (f.w && level === "W") || (f.e && level === "E");
+}
+
+function isLogAtBottom() {
+  const el = $("monitor-log");
+  return el.scrollHeight - el.scrollTop - el.clientHeight < 48;
+}
+
+function rerenderLog() {
+  const el = $("monitor-log");
+  const visible = logBuffer.filter((l) => linePasses(l.level));
+  const drop = Math.max(0, visible.length - MAX_LOG_LINES);
+  const shown = visible.slice(drop);
+  el.innerHTML =
+    (drop > 0 ? '<span class="muted">…（早前日志已按缓冲上限截断）…</span>\n' : "") +
+    shown.map((l) => l.html).join("\n");
+  domLineCount = shown.length;
+  if (logFollow || isLogAtBottom()) el.scrollTop = el.scrollHeight;
+  $("log-jump").hidden = logFollow || isLogAtBottom();
+}
+
+for (const id of ["filter-i", "filter-w", "filter-e"]) {
+  $(id).onchange = () => rerenderLog();
+}
+
+function updateLogFollow() {
+  logFollow = isLogAtBottom();
+  $("log-jump").hidden = logFollow;
 }
 
 /** 跨 chunk 安全的日志渲染：残留半个颜色序列时扣住，拼到下一段。 */
@@ -359,14 +405,24 @@ function appendMonitorLog(text) {
     }
   }
   if (!data) return;
-  // 逐行渲染：带 ANSI 的行走 SGR 解析；无颜色码的行按日志级别前缀兜底着色
-  // （混合块里设备无色打印的 I/W/E 行不再漏染）
-  const html = data
-    .split("\n")
-    .map((line) => (line.includes("\x1b") ? ansiToHtml(line) : fallbackToHtml(line)))
-    .join("\n");
-  el.insertAdjacentHTML("beforeend", html);
-  el.scrollTop = el.scrollHeight;
+  const atBottom = isLogAtBottom();
+  const frag = [];
+  for (const line of data.split("\n")) {
+    // 逐行渲染：带 ANSI 的行走 SGR 解析；无颜色码的行按日志级别前缀兜底着色
+    const level = detectLevel(line);
+    const html = line.includes("\x1b") ? ansiToHtml(line) : fallbackToHtml(line);
+    logBuffer.push({ level, html });
+    if (linePasses(level)) frag.push(html);
+  }
+  if (logBuffer.length > MAX_LOG_LINES) logBuffer.splice(0, logBuffer.length - MAX_LOG_LINES);
+  if (frag.length) {
+    el.insertAdjacentHTML("beforeend", frag.join("\n"));
+    domLineCount += frag.length;
+  }
+  // DOM 超过缓冲上限 20% 时整体重渲染瘦身
+  if (domLineCount > MAX_LOG_LINES * 1.2) rerenderLog();
+  if (atBottom || logFollow) el.scrollTop = el.scrollHeight;
+  $("log-jump").hidden = atBottom || logFollow;
 }
 appendMonitorLog.pending = "";
 
@@ -518,7 +574,11 @@ $("btn-monitor-start").onclick = () =>
     });
     monitorJob = data.jobId;
     monitorCursor = 0;
+    logBuffer.length = 0;
+    domLineCount = 0;
+    logFollow = true;
     $("monitor-log").textContent = "";
+    $("log-jump").hidden = true;
     $("monitor-status").textContent =
       `已连接 ${port}@${data.baud}（作业 ${monitorJob}）` +
       (data.logfile ? ` · 日志: ${data.logfile}` : "");
@@ -585,6 +645,12 @@ document.addEventListener("mousedown", (event) => {
   if (!selMenu.contains(event.target)) selMenu.hidden = true;
 });
 document.addEventListener("scroll", () => (selMenu.hidden = true), true);
+$("monitor-log").addEventListener("scroll", updateLogFollow);
+$("log-jump").onclick = () => {
+  const el = $("monitor-log");
+  el.scrollTop = el.scrollHeight;
+  updateLogFollow();
+};
 
 selMenu.addEventListener("click", (event) => {
   const act = event.target?.dataset?.act;

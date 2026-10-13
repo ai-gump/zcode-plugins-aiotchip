@@ -63,10 +63,22 @@
           <label class="log-toggle" title="开启后，串口数据按行加时间戳写入 &lt;项目根&gt;/log/session_&lt;串口&gt;_&lt;时间戳&gt;.log（对下次「开始监视」生效）">
             <input type="checkbox" id="monitor-logfile" /> 日志
           </label>
+          <label class="log-toggle lv-I" title="只显示 Information 级日志（都不勾选 = 显示全部）">
+            <input type="checkbox" id="filter-i" /> I 信息
+          </label>
+          <label class="log-toggle lv-W" title="只显示 Warning 级日志">
+            <input type="checkbox" id="filter-w" /> W 警告
+          </label>
+          <label class="log-toggle lv-E" title="只显示 Error 级日志">
+            <input type="checkbox" id="filter-e" /> E 错误
+          </label>
         </div>
         <div id="monitor-status" class="muted">未连接</div>
         <div class="monitor-layout">
-          <pre id="monitor-log"></pre>
+          <div class="log-wrap">
+            <pre id="monitor-log"></pre>
+            <button id="log-jump" hidden>↓ 回到底部</button>
+          </div>
           <aside id="cmd-panel">
             <div class="cmd-head">
               <span>UART 命令</span>

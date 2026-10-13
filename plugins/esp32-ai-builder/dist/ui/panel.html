@@ -234,10 +234,22 @@ body[data-theme="light"] .lv-D { color: #0969da; }
           <label class="log-toggle" title="开启后，串口数据按行加时间戳写入 &lt;项目根&gt;/log/session_&lt;串口&gt;_&lt;时间戳&gt;.log（对下次「开始监视」生效）">
             <input type="checkbox" id="monitor-logfile" /> 日志
           </label>
+          <label class="log-toggle lv-I" title="只显示 Information 级日志（都不勾选 = 显示全部）">
+            <input type="checkbox" id="filter-i" /> I 信息
+          </label>
+          <label class="log-toggle lv-W" title="只显示 Warning 级日志">
+            <input type="checkbox" id="filter-w" /> W 警告
+          </label>
+          <label class="log-toggle lv-E" title="只显示 Error 级日志">
+            <input type="checkbox" id="filter-e" /> E 错误
+          </label>
         </div>
         <div id="monitor-status" class="muted">未连接</div>
         <div class="monitor-layout">
-          <pre id="monitor-log"></pre>
+          <div class="log-wrap">
+            <pre id="monitor-log"></pre>
+            <button id="log-jump" hidden>↓ 回到底部</button>
+          </div>
           <aside id="cmd-panel">
             <div class="cmd-head">
               <span>UART 命令</span>
@@ -27194,10 +27206,46 @@ container holding the app. Specify either width or maxWidth, and either height o
     const classes = [...fg ? [fg] : [], ...open2 > 0 ? ["ansi-bold"] : []];
     return classes.length ? `<span class="${classes.join(" ")}">${html}</span>` : html;
   }
-  function fallbackToHtml(line) {
+  function detectLevel(line) {
     const m2 = /(?:^|>\s*|\s)([VDIWE]) \(\d+\)/.exec(line) ?? /\b(ERROR|WARN)\b/.exec(line);
-    const cls = m2 ? m2[1] === "ERROR" ? "E" : m2[1] === "WARN" ? "W" : m2[1] : null;
+    if (!m2) return null;
+    const t = m2[1];
+    return t === "ERROR" ? "E" : t === "WARN" ? "W" : t;
+  }
+  function fallbackToHtml(line) {
+    const cls = detectLevel(line);
     return cls && ["V", "D", "I", "W", "E"].includes(cls) ? `<span class="lv-${cls}">${escapeHtml(line)}</span>` : escapeHtml(line);
+  }
+  var logBuffer = [];
+  var MAX_LOG_LINES = 5e3;
+  var logFollow = true;
+  var domLineCount = 0;
+  function linePasses(level) {
+    const f2 = { i: $("filter-i").checked, w: $("filter-w").checked, e: $("filter-e").checked };
+    if (!(f2.i || f2.w || f2.e)) return true;
+    if (level === null) return true;
+    return f2.i && level === "I" || f2.w && level === "W" || f2.e && level === "E";
+  }
+  function isLogAtBottom() {
+    const el = $("monitor-log");
+    return el.scrollHeight - el.scrollTop - el.clientHeight < 48;
+  }
+  function rerenderLog() {
+    const el = $("monitor-log");
+    const visible = logBuffer.filter((l2) => linePasses(l2.level));
+    const drop = Math.max(0, visible.length - MAX_LOG_LINES);
+    const shown = visible.slice(drop);
+    el.innerHTML = (drop > 0 ? '<span class="muted">\u2026\uFF08\u65E9\u524D\u65E5\u5FD7\u5DF2\u6309\u7F13\u51B2\u4E0A\u9650\u622A\u65AD\uFF09\u2026</span>\n' : "") + shown.map((l2) => l2.html).join("\n");
+    domLineCount = shown.length;
+    if (logFollow || isLogAtBottom()) el.scrollTop = el.scrollHeight;
+    $("log-jump").hidden = logFollow || isLogAtBottom();
+  }
+  for (const id of ["filter-i", "filter-w", "filter-e"]) {
+    $(id).onchange = () => rerenderLog();
+  }
+  function updateLogFollow() {
+    logFollow = isLogAtBottom();
+    $("log-jump").hidden = logFollow;
   }
   function appendMonitorLog(text) {
     const el = $("monitor-log");
@@ -27212,9 +27260,22 @@ container holding the app. Specify either width or maxWidth, and either height o
       }
     }
     if (!data) return;
-    const html = data.split("\n").map((line) => line.includes("\x1B") ? ansiToHtml(line) : fallbackToHtml(line)).join("\n");
-    el.insertAdjacentHTML("beforeend", html);
-    el.scrollTop = el.scrollHeight;
+    const atBottom = isLogAtBottom();
+    const frag = [];
+    for (const line of data.split("\n")) {
+      const level = detectLevel(line);
+      const html = line.includes("\x1B") ? ansiToHtml(line) : fallbackToHtml(line);
+      logBuffer.push({ level, html });
+      if (linePasses(level)) frag.push(html);
+    }
+    if (logBuffer.length > MAX_LOG_LINES) logBuffer.splice(0, logBuffer.length - MAX_LOG_LINES);
+    if (frag.length) {
+      el.insertAdjacentHTML("beforeend", frag.join("\n"));
+      domLineCount += frag.length;
+    }
+    if (domLineCount > MAX_LOG_LINES * 1.2) rerenderLog();
+    if (atBottom || logFollow) el.scrollTop = el.scrollHeight;
+    $("log-jump").hidden = atBottom || logFollow;
   }
   appendMonitorLog.pending = "";
   var uartCommands = [];
@@ -27349,7 +27410,11 @@ container holding the app. Specify either width or maxWidth, and either height o
     });
     monitorJob = data.jobId;
     monitorCursor = 0;
+    logBuffer.length = 0;
+    domLineCount = 0;
+    logFollow = true;
     $("monitor-log").textContent = "";
+    $("log-jump").hidden = true;
     $("monitor-status").textContent = `\u5DF2\u8FDE\u63A5 ${port}@${data.baud}\uFF08\u4F5C\u4E1A ${monitorJob}\uFF09` + (data.logfile ? ` \xB7 \u65E5\u5FD7: ${data.logfile}` : "");
     $("btn-monitor-start").disabled = true;
     $("btn-monitor-stop").disabled = false;
@@ -27405,6 +27470,12 @@ container holding the app. Specify either width or maxWidth, and either height o
     if (!selMenu.contains(event.target)) selMenu.hidden = true;
   });
   document.addEventListener("scroll", () => selMenu.hidden = true, true);
+  $("monitor-log").addEventListener("scroll", updateLogFollow);
+  $("log-jump").onclick = () => {
+    const el = $("monitor-log");
+    el.scrollTop = el.scrollHeight;
+    updateLogFollow();
+  };
   selMenu.addEventListener("click", (event) => {
     const act = event.target?.dataset?.act;
     if (!act) return;
