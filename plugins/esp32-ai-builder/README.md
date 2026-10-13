@@ -40,7 +40,7 @@ Slash commands: `/esp32:new-project`, `/esp32:build`, `/esp32:flash`, `/esp32:mo
 ## Known limits (V1)
 
 - Debug (OpenOCD/GDB), Windows, QEMU: deferred.
-- `esp32_monitor_send` opens the port for writing, which resets some boards (driver behavior).
+- Sending input is routed through the resident monitor process (no port reopen), so boards whose USB-UART bridge resets on control-line changes (e.g. ESP32-S3 built-in USB-Serial-JTAG) keep running.
 - One serial port is held by at most one monitor job per session.
 
 ## Local development

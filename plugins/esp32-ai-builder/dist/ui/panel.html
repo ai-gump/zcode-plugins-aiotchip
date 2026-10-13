@@ -100,8 +100,8 @@ pre {
 .send-bar input:not([type="checkbox"]) { flex: 1; min-width: 0; }
 .send-bar .nl { display: flex; align-items: center; gap: 3px; color: var(--muted); font-size: 11px; flex: 0 0 auto; }
 
-.log-toggle { margin-left: auto; display: flex; align-items: center; gap: 4px; color: var(--muted); font-size: 12px; cursor: pointer; }
-.log-toggle input { accent-color: var(--accent); }
+.log-toggle { margin-left: auto; display: flex; align-items: center; gap: 4px; color: var(--muted); cursor: pointer; }
+.log-toggle input[type="checkbox"] { width: 16px; height: 16px; accent-color: var(--accent); margin: 0; }
 
 /* 串口日志着色（ANSI SGR + 日志级别兜底） */
 #monitor-log .ansi-bold { font-weight: 600; }
@@ -26816,7 +26816,7 @@ container holding the app. Specify either width or maxWidth, and either height o
 
   // ui/panel-client.mjs
   var app = new l(
-    { name: "esp32-ai-builder-panel", version: "0.4.0" },
+    { name: "esp32-ai-builder-panel", version: "0.4.1" },
     { availableDisplayModes: ["inline", "fullscreen"] }
   );
   var $ = (id) => document.getElementById(id);
@@ -26903,16 +26903,22 @@ container holding the app. Specify either width or maxWidth, and either height o
     select.innerHTML = (ports.length ? ports : ["\uFF08\u672A\u68C0\u6D4B\u5230\u4E32\u53E3\uFF09"]).map((p2) => `<option value="${p2}">${p2}</option>`).join("");
     if (current && ports.includes(current)) select.value = current;
   }
+  var refreshInFlight = false;
   async function refreshEnv() {
-    $("env-line").textContent = "\u68C0\u67E5\u73AF\u5883\u4E2D\u2026";
+    if (refreshInFlight) return;
+    refreshInFlight = true;
+    const currentPort = $("port").value;
+    const currentMonitor = $("monitor-port").value;
     try {
       const env = await call("esp32_env_check", {});
       const idf = env.idf;
       $("env-line").textContent = env.ready ? `\u73AF\u5883\u5C31\u7EEA\uFF1AESP-IDF ${idf.version} @ ${idf.path}` : `\u73AF\u5883\u672A\u5C31\u7EEA\uFF1A${(env.suggestions ?? []).join(" ")}`;
-      portsToSelect($("port"), env.serialPorts ?? []);
-      portsToSelect($("monitor-port"), env.serialPorts ?? []);
+      portsToSelect($("port"), env.serialPorts ?? [], currentPort);
+      portsToSelect($("monitor-port"), env.serialPorts ?? [], currentMonitor);
     } catch (error62) {
       $("env-line").textContent = `\u73AF\u5883\u68C0\u67E5\u5931\u8D25\uFF1A${error62.message}`;
+    } finally {
+      refreshInFlight = false;
     }
   }
   async function startJobTool(name, args, title) {
@@ -27166,6 +27172,8 @@ container holding the app. Specify either width or maxWidth, and either height o
   $("monitor-input").onkeydown = (event) => {
     if (event.key === "Enter") sendFromInput();
   };
+  $("port").onclick = () => refreshEnv();
+  $("monitor-port").onclick = () => refreshEnv();
   async function pollMonitor() {
     if (!monitorJob) return;
     try {

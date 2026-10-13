@@ -2,7 +2,7 @@
 import { App } from "@modelcontextprotocol/ext-apps";
 
 const app = new App(
-  { name: "esp32-ai-builder-panel", version: "0.4.0" },
+  { name: "esp32-ai-builder-panel", version: "0.4.1" },
   { availableDisplayModes: ["inline", "fullscreen"] },
 );
 
@@ -103,18 +103,26 @@ function portsToSelect(select, ports, current) {
   if (current && ports.includes(current)) select.value = current;
 }
 
+let refreshInFlight = false;
+
+/** 拉取环境并刷新两个串口下拉（保持当前选中值）。点击下拉即刻触发，不做定时自动刷新。 */
 async function refreshEnv() {
-  $("env-line").textContent = "检查环境中…";
+  if (refreshInFlight) return;
+  refreshInFlight = true;
+  const currentPort = $("port").value;
+  const currentMonitor = $("monitor-port").value;
   try {
     const env = await call("esp32_env_check", {});
     const idf = env.idf;
     $("env-line").textContent = env.ready
       ? `环境就绪：ESP-IDF ${idf.version} @ ${idf.path}`
       : `环境未就绪：${(env.suggestions ?? []).join(" ")}`;
-    portsToSelect($("port"), env.serialPorts ?? []);
-    portsToSelect($("monitor-port"), env.serialPorts ?? []);
+    portsToSelect($("port"), env.serialPorts ?? [], currentPort);
+    portsToSelect($("monitor-port"), env.serialPorts ?? [], currentMonitor);
   } catch (error) {
     $("env-line").textContent = `环境检查失败：${error.message}`;
+  } finally {
+    refreshInFlight = false;
   }
 }
 
@@ -395,6 +403,10 @@ $("btn-monitor-send").onclick = sendFromInput;
 $("monitor-input").onkeydown = (event) => {
   if (event.key === "Enter") sendFromInput();
 };
+
+// 点开串口下拉即刻刷新列表（两个 Tab 共用同一环境数据）
+$("port").onclick = () => refreshEnv();
+$("monitor-port").onclick = () => refreshEnv();
 
 async function pollMonitor() {
   if (!monitorJob) return;

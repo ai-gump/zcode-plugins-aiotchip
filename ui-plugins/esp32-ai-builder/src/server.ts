@@ -21,6 +21,7 @@ import {
 } from "./contract";
 import {
   cancelJob,
+  getJobChild,
   readJobLogs,
   readJobMeta,
   reapStaleJobs,
@@ -42,7 +43,7 @@ import {
 } from "./idf";
 import { listSerialPorts } from "./serial";
 
-const PLUGIN_VERSION = "0.4.0";
+const PLUGIN_VERSION = "0.4.1";
 const HTML_MIME = "text/html;profile=mcp-app";
 const DIST_DIR = dirname(fileURLToPath(import.meta.url));
 
@@ -704,6 +705,7 @@ server.registerTool(
     const meta = await startJob({
       dataDir,
       kind: "monitor",
+      stdinPipe: true,
       title: `serial monitor → ${target}`,
       command: (jobDir) =>
         `${shellQuote(idfPython)} ${shellQuote(helper)} --port ${shellQuote(target)} --baud ${baud ?? 115200} ` +
@@ -767,7 +769,9 @@ server.registerTool(
   {
     title: "Send input to the device",
     description:
-      "Write one line of input to a monitored serial port. NOTE: opening the port for writing can reset some boards.",
+      "Write one line of input to a monitored serial port. Routed through the resident monitor " +
+      "process's stdin — the port is NOT reopened, so boards whose USB-UART bridge resets on " +
+      "control-line changes (e.g. ESP32-S3 built-in USB-Serial-JTAG) keep running.",
     inputSchema: {
       jobId: z.string().describe("Monitor job id holding the port"),
       text: z.string().describe("Text to send"),
@@ -780,16 +784,20 @@ server.registerTool(
     if (meta.kind !== "monitor" || meta.status !== "running") {
       throw new Error(`监视作业 ${jobId} 不在运行（${meta.status}）。`);
     }
-    const { idfPython } = await requireIdf();
-    const helper = join(DIST_DIR, "serial-helper.py");
-    const port = meta.context?.port ?? "";
-    const probe = await runCapture(
-      `${shellQuote(idfPython as string)} ${shellQuote(helper)} --port ${shellQuote(port)} --send-text ${shellQuote(text)}${newline === false ? "" : " --send-newline"}`,
-      { timeoutMs: 5000 },
-    );
+    const stdin = getJobChild(jobId)?.stdin;
+    if (!stdin || stdin.destroyed) {
+      throw new Error(
+        "无法连接监视进程的发送通道（服务可能重启过）；请 esp32_monitor_stop 后重新 esp32_monitor_start。",
+      );
+    }
+    await new Promise<void>((resolve, reject) => {
+      stdin.write(JSON.stringify({ text, newline: newline ?? true }) + "\n", (error) =>
+        error ? reject(error) : resolve(),
+      );
+    });
     return {
-      content: [{ type: "text", text: probe.ok ? `已发送 ${text.length} 字符到 ${port}。` : `发送失败：${probe.output}` }],
-      structuredContent: { jobId, port, ok: probe.ok },
+      content: [{ type: "text", text: `已发送 ${text.length} 字符到 ${meta.context?.port ?? "?"}（未重开端口）。` }],
+      structuredContent: { jobId, port: meta.context?.port, ok: true },
     };
   },
 );

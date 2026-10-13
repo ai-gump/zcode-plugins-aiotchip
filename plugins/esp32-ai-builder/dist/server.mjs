@@ -36151,7 +36151,7 @@ async function startJob(options) {
     cwd: options.cwd,
     env: options.env ? { ...process.env, ...options.env } : process.env,
     detached: true,
-    stdio: ["ignore", "pipe", "pipe"]
+    stdio: [options.stdinPipe ? "pipe" : "ignore", "pipe", "pipe"]
   });
   entry.child = child;
   meta3.pid = child.pid;
@@ -36173,6 +36173,9 @@ async function startJob(options) {
     void signal;
   });
   return meta3;
+}
+function getJobChild(jobId) {
+  return registry2.get(jobId)?.child;
 }
 async function jobDir(dataDir2, jobId) {
   const dir = join(jobsRoot(dataDir2), jobId);
@@ -36374,7 +36377,7 @@ async function listSerialPorts() {
 }
 
 // src/server.ts
-var PLUGIN_VERSION = "0.4.0";
+var PLUGIN_VERSION = "0.4.1";
 var HTML_MIME = "text/html;profile=mcp-app";
 var DIST_DIR = dirname(fileURLToPath(import.meta.url));
 var dataDir = process.env.ZCODE_PLUGIN_DATA?.trim() || join4(DIST_DIR, "data");
@@ -36927,6 +36930,7 @@ server.registerTool(
     const meta3 = await startJob({
       dataDir,
       kind: "monitor",
+      stdinPipe: true,
       title: `serial monitor \u2192 ${target}`,
       command: (jobDir2) => `${shellQuote2(idfPython)} ${shellQuote2(helper)} --port ${shellQuote2(target)} --baud ${baud ?? 115200} --log ${shellQuote2(join4(jobDir2, "log"))}` + (logfile ? ` --logfile ${shellQuote2(logfile)}` : ""),
       context: { port: target, ...logfile ? { logfile } : {} },
@@ -36978,7 +36982,7 @@ server.registerTool(
   "esp32_monitor_send",
   {
     title: "Send input to the device",
-    description: "Write one line of input to a monitored serial port. NOTE: opening the port for writing can reset some boards.",
+    description: "Write one line of input to a monitored serial port. Routed through the resident monitor process's stdin \u2014 the port is NOT reopened, so boards whose USB-UART bridge resets on control-line changes (e.g. ESP32-S3 built-in USB-Serial-JTAG) keep running.",
     inputSchema: {
       jobId: external_exports.string().describe("Monitor job id holding the port"),
       text: external_exports.string().describe("Text to send"),
@@ -36991,16 +36995,21 @@ server.registerTool(
     if (meta3.kind !== "monitor" || meta3.status !== "running") {
       throw new Error(`\u76D1\u89C6\u4F5C\u4E1A ${jobId} \u4E0D\u5728\u8FD0\u884C\uFF08${meta3.status}\uFF09\u3002`);
     }
-    const { idfPython } = await requireIdf();
-    const helper = join4(DIST_DIR, "serial-helper.py");
-    const port = meta3.context?.port ?? "";
-    const probe = await runCapture(
-      `${shellQuote2(idfPython)} ${shellQuote2(helper)} --port ${shellQuote2(port)} --send-text ${shellQuote2(text)}${newline === false ? "" : " --send-newline"}`,
-      { timeoutMs: 5e3 }
-    );
+    const stdin = getJobChild(jobId)?.stdin;
+    if (!stdin || stdin.destroyed) {
+      throw new Error(
+        "\u65E0\u6CD5\u8FDE\u63A5\u76D1\u89C6\u8FDB\u7A0B\u7684\u53D1\u9001\u901A\u9053\uFF08\u670D\u52A1\u53EF\u80FD\u91CD\u542F\u8FC7\uFF09\uFF1B\u8BF7 esp32_monitor_stop \u540E\u91CD\u65B0 esp32_monitor_start\u3002"
+      );
+    }
+    await new Promise((resolve, reject) => {
+      stdin.write(
+        JSON.stringify({ text, newline: newline ?? true }) + "\n",
+        (error62) => error62 ? reject(error62) : resolve()
+      );
+    });
     return {
-      content: [{ type: "text", text: probe.ok ? `\u5DF2\u53D1\u9001 ${text.length} \u5B57\u7B26\u5230 ${port}\u3002` : `\u53D1\u9001\u5931\u8D25\uFF1A${probe.output}` }],
-      structuredContent: { jobId, port, ok: probe.ok }
+      content: [{ type: "text", text: `\u5DF2\u53D1\u9001 ${text.length} \u5B57\u7B26\u5230 ${meta3.context?.port ?? "?"}\uFF08\u672A\u91CD\u5F00\u7AEF\u53E3\uFF09\u3002` }],
+      structuredContent: { jobId, port: meta3.context?.port, ok: true }
     };
   }
 );

@@ -58,6 +58,8 @@ export interface StartJobOptions {
   cwd?: string;
   env?: Record<string, string>;
   context?: Record<string, string>;
+  /** 打开 stdin 管道（监视作业用它接收发送指令）。 */
+  stdinPipe?: boolean;
   onExit?: (meta: JobMeta) => void;
 }
 
@@ -86,7 +88,7 @@ export async function startJob(options: StartJobOptions): Promise<JobMeta> {
     cwd: options.cwd,
     env: options.env ? { ...process.env, ...options.env } : process.env,
     detached: true,
-    stdio: ["ignore", "pipe", "pipe"],
+    stdio: [options.stdinPipe ? "pipe" : "ignore", "pipe", "pipe"],
   });
   entry.child = child;
   meta.pid = child.pid;
@@ -109,6 +111,11 @@ export async function startJob(options: StartJobOptions): Promise<JobMeta> {
     void signal; // 记录在日志之外仅用于调试，不进 meta
   });
   return meta;
+}
+
+/** 取运行中作业的子进程（监视发送走它的 stdin）；作业结束/未知返回 undefined。 */
+export function getJobChild(jobId: string): ChildProcess | undefined {
+  return registry.get(jobId)?.child;
 }
 
 export async function jobDir(dataDir: string, jobId: string): Promise<string> {

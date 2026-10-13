@@ -93,8 +93,8 @@ pre {
 .send-bar input:not([type="checkbox"]) { flex: 1; min-width: 0; }
 .send-bar .nl { display: flex; align-items: center; gap: 3px; color: var(--muted); font-size: 11px; flex: 0 0 auto; }
 
-.log-toggle { margin-left: auto; display: flex; align-items: center; gap: 4px; color: var(--muted); font-size: 12px; cursor: pointer; }
-.log-toggle input { accent-color: var(--accent); }
+.log-toggle { margin-left: auto; display: flex; align-items: center; gap: 4px; color: var(--muted); cursor: pointer; }
+.log-toggle input[type="checkbox"] { width: 16px; height: 16px; accent-color: var(--accent); margin: 0; }
 
 /* 串口日志着色（ANSI SGR + 日志级别兜底） */
 #monitor-log .ansi-bold { font-weight: 600; }

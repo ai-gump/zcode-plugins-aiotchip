@@ -40,7 +40,7 @@ English documentation: [README.md](README.md)。
 ## 已知限制（V1）
 
 - 调试（OpenOCD/GDB）、Windows、QEMU 暂未排期。
-- `esp32_monitor_send` 需要打开写端口，部分板卡驱动会借此复位芯片（驱动行为）。
+- 发送输入经常驻监视进程的 stdin 通道，不重开端口——S3 内置 USB-Serial-JTAG 这类“控制线变化即复位”的板卡不会再被打进下载模式。
 - 每个会话每串口同时仅一个监视作业。
 
 ## 本地开发
