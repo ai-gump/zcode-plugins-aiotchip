@@ -2,7 +2,7 @@
 import { App } from "@modelcontextprotocol/ext-apps";
 
 const app = new App(
-  { name: "esp32-ai-builder-panel", version: "0.3.0" },
+  { name: "esp32-ai-builder-panel", version: "0.4.0" },
   { availableDisplayModes: ["inline", "fullscreen"] },
 );
 
@@ -165,6 +165,89 @@ async function pollJob() {
   }
 }
 
+/* ---------- 串口日志着色 ---------- */
+
+const ANSI_FG = {
+  30: "ansi-30", 31: "ansi-31", 32: "ansi-32", 33: "ansi-33",
+  34: "ansi-34", 35: "ansi-35", 36: "ansi-36", 37: "ansi-37",
+  90: "ansi-90", 91: "ansi-91", 92: "ansi-92", 93: "ansi-93",
+  94: "ansi-94", 95: "ansi-95", 96: "ansi-96", 97: "ansi-97",
+};
+
+function escapeHtml(text) {
+  return text.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+}
+
+/** SGR 序列 → span class 流。只处理颜色/加粗，其余序列丢弃。 */
+function ansiToHtml(data) {
+  let html = "";
+  let open = 0;
+  let fg = null;
+  let pos = 0;
+  for (const match of data.matchAll(/\x1b\[([0-9;]*)m/g)) {
+    html += escapeHtml(data.slice(pos, match.index));
+    pos = match.index + match[0].length;
+    const codes = (match[1] || "0").split(";").map((n) => Number(n) || 0);
+    for (const code of codes) {
+      if (code === 0) {
+        open = 0;
+        fg = null;
+      } else if (code === 1) {
+        open += 1;
+      } else if (code === 22) {
+        open = Math.max(0, open - 1);
+      } else if (ANSI_FG[code]) {
+        fg = ANSI_FG[code];
+      } else if (code === 39) {
+        fg = null;
+      }
+    }
+  }
+  html += escapeHtml(data.slice(pos));
+  // 统一包一层：chunk 边界处的开标签在下一段重建，避免跨段标签配对问题
+  const classes = [...(fg ? [fg] : []), ...(open > 0 ? ["ansi-bold"] : [])];
+  return classes.length
+    ? `<span class="${classes.join(" ")}">${html}</span>`
+    : html;
+}
+
+/** 无 ANSI 时的兜底：按 ESP-IDF 日志级别前缀（I/W/E/D/V (毫秒)）整行着色。 */
+function fallbackToHtml(data) {
+  return data
+    .split("\n")
+    .map((line) => {
+      const m = /(?:^|\s)([VDIWE]) \(\d+\)/.exec(line) ?? /\b(ERROR|WARN)\b/.exec(line);
+      let cls = null;
+      if (m) {
+        cls = m[1] === "ERROR" ? "E" : m[1] === "WARN" ? "W" : m[1];
+      }
+      return cls && ["V", "D", "I", "W", "E"].includes(cls)
+        ? `<span class="lv-${cls}">${escapeHtml(line)}</span>`
+        : escapeHtml(line);
+    })
+    .join("\n");
+}
+
+/** 跨 chunk 安全的日志渲染：残留半个颜色序列时扣住，拼到下一段。 */
+function appendMonitorLog(text) {
+  const el = $("monitor-log");
+  let data = appendMonitorLog.pending + text;
+  appendMonitorLog.pending = "";
+  const lastEsc = data.lastIndexOf("\x1b");
+  if (lastEsc !== -1) {
+    const tail = data.slice(lastEsc);
+    if (!/\x1b\[[0-9;?]*[ -/]*[@-~]$/.test(tail) && !tail.includes("m")) {
+      appendMonitorLog.pending = tail;
+      data = data.slice(0, lastEsc);
+    }
+  }
+  if (!data) return;
+  const html = data.includes("\x1b") ? ansiToHtml(data) : fallbackToHtml(data);
+  el.insertAdjacentHTML("beforeend", html);
+  el.scrollTop = el.scrollHeight;
+}
+appendMonitorLog.pending = "";
+
 /* ---------- 串口监视 ---------- */
 
 let uartCommands = [];
@@ -270,14 +353,18 @@ $("btn-monitor-start").onclick = () =>
   guard(async () => {
     const port = $("monitor-port").value;
     if (!port || port.startsWith("（")) throw new Error("未检测到串口设备");
+    const logToFile = $("monitor-logfile").checked;
     const data = await call("esp32_monitor_start", {
       port,
       baud: Number($("monitor-baud").value) || 115200,
+      logToFile,
     });
     monitorJob = data.jobId;
     monitorCursor = 0;
     $("monitor-log").textContent = "";
-    $("monitor-status").textContent = `已连接 ${port}@${data.baud}（作业 ${monitorJob}）`;
+    $("monitor-status").textContent =
+      `已连接 ${port}@${data.baud}（作业 ${monitorJob}）` +
+      (data.logfile ? ` · 日志: ${data.logfile}` : "");
     $("btn-monitor-start").disabled = true;
     $("btn-monitor-stop").disabled = false;
   });
@@ -312,12 +399,13 @@ $("monitor-input").onkeydown = (event) => {
 async function pollMonitor() {
   if (!monitorJob) return;
   try {
-    const chunk = await call("esp32_monitor_read", { jobId: monitorJob, cursor: monitorCursor });
+    const chunk = await call("esp32_monitor_read", {
+      jobId: monitorJob,
+      cursor: monitorCursor,
+      ansi: true,
+    });
     monitorCursor = chunk.cursor;
-    if (chunk.text) {
-      $("monitor-log").textContent += chunk.text;
-      $("monitor-log").scrollTop = $("monitor-log").scrollHeight;
-    }
+    if (chunk.text) appendMonitorLog(chunk.text);
     if (chunk.status !== "running") {
       $("monitor-status").textContent = `连接已断开（${statusText(chunk.status)}）`;
       monitorJob = null;

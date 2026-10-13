@@ -92,3 +92,30 @@ pre {
 .send-bar { display: flex; gap: 6px; margin-top: 8px; align-items: center; }
 .send-bar input:not([type="checkbox"]) { flex: 1; min-width: 0; }
 .send-bar .nl { display: flex; align-items: center; gap: 3px; color: var(--muted); font-size: 11px; flex: 0 0 auto; }
+
+.log-toggle { margin-left: auto; display: flex; align-items: center; gap: 4px; color: var(--muted); font-size: 12px; cursor: pointer; }
+.log-toggle input { accent-color: var(--accent); }
+
+/* 串口日志着色（ANSI SGR + 日志级别兜底） */
+#monitor-log .ansi-bold { font-weight: 600; }
+.ansi-30, .ansi-90 { color: #8b949e; }
+.ansi-31, .ansi-91 { color: #f85149; }
+.ansi-32, .ansi-92 { color: #3fb950; }
+.ansi-33, .ansi-93 { color: #d29922; }
+.ansi-34, .ansi-94 { color: #58a6ff; }
+.ansi-35, .ansi-95 { color: #bc8cff; }
+.ansi-36, .ansi-96 { color: #39c5cf; }
+.ansi-37, .ansi-97 { color: inherit; }
+body[data-theme="light"] .ansi-31, body[data-theme="light"] .ansi-91 { color: #cf222e; }
+body[data-theme="light"] .ansi-32, body[data-theme="light"] .ansi-92 { color: #1a7f37; }
+body[data-theme="light"] .ansi-33, body[data-theme="light"] .ansi-93 { color: #9a6700; }
+body[data-theme="light"] .ansi-34, body[data-theme="light"] .ansi-94 { color: #0969da; }
+.lv-E { color: #f85149; font-weight: 600; }
+.lv-W { color: #d29922; }
+.lv-I { color: #3fb950; }
+.lv-D { color: #58a6ff; }
+.lv-V { color: #8b949e; }
+body[data-theme="light"] .lv-E { color: #cf222e; }
+body[data-theme="light"] .lv-W { color: #9a6700; }
+body[data-theme="light"] .lv-I { color: #1a7f37; }
+body[data-theme="light"] .lv-D { color: #0969da; }

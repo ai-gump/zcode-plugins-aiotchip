@@ -6802,7 +6802,7 @@ var require_dist = __commonJS({
 // src/server.ts
 import { mkdir as mkdir2, readFile as readFile2 } from "node:fs/promises";
 import { existsSync as existsSync3 } from "node:fs";
-import { dirname, isAbsolute, join as join4 } from "node:path";
+import { basename, dirname, isAbsolute, join as join4 } from "node:path";
 import { fileURLToPath } from "node:url";
 
 // ../../node_modules/.pnpm/zod@4.6.5/node_modules/zod/v3/helpers/util.js
@@ -36187,7 +36187,7 @@ async function readJobMeta(dataDir2, jobId) {
   if (cached2) return cached2;
   return JSON.parse(await readFile(join(dir, "meta.json"), "utf8"));
 }
-async function readJobLogs(dataDir2, jobId, cursor = 0, maxBytes = 32 * 1024) {
+async function readJobLogs(dataDir2, jobId, cursor = 0, maxBytes = 32 * 1024, keepAnsi = false) {
   const dir = await jobDir(dataDir2, jobId);
   const meta3 = await readJobMeta(dataDir2, jobId);
   const { open: open2 } = await import("node:fs/promises");
@@ -36198,7 +36198,13 @@ async function readJobLogs(dataDir2, jobId, cursor = 0, maxBytes = 32 * 1024) {
     const length = Math.min(maxBytes, size - start);
     const buffer = Buffer.alloc(length);
     if (length > 0) await handle.read(buffer, 0, length, start);
-    return { cursor: start + length, size, text: stripAnsi(buffer.toString("utf8")), status: meta3.status };
+    const text = buffer.toString("utf8");
+    return {
+      cursor: start + length,
+      size,
+      text: keepAnsi ? text : stripAnsi(text),
+      status: meta3.status
+    };
   } finally {
     await handle.close();
   }
@@ -36368,7 +36374,7 @@ async function listSerialPorts() {
 }
 
 // src/server.ts
-var PLUGIN_VERSION = "0.3.0";
+var PLUGIN_VERSION = "0.4.0";
 var HTML_MIME = "text/html;profile=mcp-app";
 var DIST_DIR = dirname(fileURLToPath(import.meta.url));
 var dataDir = process.env.ZCODE_PLUGIN_DATA?.trim() || join4(DIST_DIR, "data");
@@ -36889,14 +36895,15 @@ server.registerTool(
   "esp32_monitor_start",
   {
     title: "Start the serial monitor",
-    description: "Start reading a serial port in the background (pyserial helper from the IDF python environment); raw bytes are appended to the job log. Read incrementally with esp32_monitor_read. One port can only be monitored by one job at a time.",
+    description: "Start reading a serial port in the background (pyserial helper from the IDF python environment); raw bytes are appended to the job log. Read incrementally with esp32_monitor_read (pass ansi:true to keep raw color codes for UI rendering). With logToFile:true, timestamped lines are also written to <workspace>/log/session_<port>_<timestamp>.log. One port can only be monitored by one job at a time.",
     inputSchema: {
       port: external_exports.string().describe("Serial port, e.g. /dev/tty.usbmodem*"),
-      baud: external_exports.number().optional().describe("Baud rate (default 115200)")
+      baud: external_exports.number().optional().describe("Baud rate (default 115200)"),
+      logToFile: external_exports.boolean().optional().describe("Also write timestamped lines to <workspace>/log/session_<port>_<timestamp>.log")
     },
     _meta: MODEL_AND_APP
   },
-  async ({ port, baud }) => {
+  async ({ port, baud, logToFile }) => {
     const { idfPython } = await requireIdf();
     if (!idfPython) {
       throw new Error("\u4E32\u53E3\u76D1\u89C6\u9700\u8981 IDF python \u73AF\u5883\uFF08pyserial\uFF09\uFF1B\u8BF7\u5148 esp32_env_check \u5E76\u5B8C\u6210\u5B89\u88C5\u3002");
@@ -36907,20 +36914,40 @@ server.registerTool(
     }
     const helper = join4(DIST_DIR, "serial-helper.py");
     if (!existsSync3(helper)) throw new Error("\u5B89\u88C5\u4EA7\u7269\u7F3A\u5C11 serial-helper.py\uFF1B\u8BF7\u91CD\u88C5\u63D2\u4EF6\u3002");
+    let logfile;
+    if (logToFile) {
+      const portShort = basename(target).replace(/[^A-Za-z0-9._-]/g, "_");
+      const now = /* @__PURE__ */ new Date();
+      const pad = (n) => String(n).padStart(2, "0");
+      const stamp = `${now.getFullYear()}${pad(now.getMonth() + 1)}${pad(now.getDate())}_${pad(now.getHours())}${pad(now.getMinutes())}${pad(now.getSeconds())}`;
+      const dir = join4(workspaceRoot, "log");
+      await mkdir2(dir, { recursive: true });
+      logfile = join4(dir, `session_${portShort}_${stamp}.log`);
+    }
     const meta3 = await startJob({
       dataDir,
       kind: "monitor",
       title: `serial monitor \u2192 ${target}`,
-      command: (jobDir2) => `${shellQuote2(idfPython)} ${shellQuote2(helper)} --port ${shellQuote2(target)} --baud ${baud ?? 115200} --log ${shellQuote2(join4(jobDir2, "log"))}`,
-      context: { port: target },
+      command: (jobDir2) => `${shellQuote2(idfPython)} ${shellQuote2(helper)} --port ${shellQuote2(target)} --baud ${baud ?? 115200} --log ${shellQuote2(join4(jobDir2, "log"))}` + (logfile ? ` --logfile ${shellQuote2(logfile)}` : ""),
+      context: { port: target, ...logfile ? { logfile } : {} },
       onExit: () => {
         if (serialLock.get(target) === meta3.id) serialLock.delete(target);
       }
     });
     serialLock.set(target, meta3.id);
     return {
-      content: [{ type: "text", text: `\u4E32\u53E3\u76D1\u89C6\u5DF2\u542F\u52A8\uFF08${target}@${baud ?? 115200}\uFF09\u3002\u7528 esp32_monitor_read { jobId: "${meta3.id}" } \u589E\u91CF\u8BFB\u53D6\u3002` }],
-      structuredContent: { ...jobRef(meta3), port: target, baud: baud ?? 115200 }
+      content: [
+        {
+          type: "text",
+          text: `\u4E32\u53E3\u76D1\u89C6\u5DF2\u542F\u52A8\uFF08${target}@${baud ?? 115200}\uFF09\u3002` + (logfile ? `\u65E5\u5FD7\u843D\u76D8\uFF1A${logfile}\u3002` : "") + ` \u7528 esp32_monitor_read { jobId: "${meta3.id}" } \u589E\u91CF\u8BFB\u53D6\u3002`
+        }
+      ],
+      structuredContent: {
+        ...jobRef(meta3),
+        port: target,
+        baud: baud ?? 115200,
+        ...logfile ? { logfile } : {}
+      }
     };
   }
 );
@@ -36928,18 +36955,19 @@ server.registerTool(
   "esp32_monitor_read",
   {
     title: "Read monitor output",
-    description: "Incrementally read the monitor job's serial output from a byte cursor.",
+    description: "Incrementally read the monitor job's serial output from a byte cursor. Pass ansi:true to keep raw ANSI color codes (for terminal-style UI rendering); default output is ANSI-stripped plain text.",
     inputSchema: {
       jobId: external_exports.string().describe("Monitor job id"),
       cursor: external_exports.number().optional().describe("Byte offset from the previous call (0 for first read)"),
-      maxBytes: external_exports.number().optional().describe("Max bytes to return (default 32768)")
+      maxBytes: external_exports.number().optional().describe("Max bytes to return (default 32768)"),
+      ansi: external_exports.boolean().optional().describe("Keep raw ANSI color codes (default false)")
     },
     _meta: MODEL_AND_APP
   },
-  async ({ jobId, cursor, maxBytes }) => {
+  async ({ jobId, cursor, maxBytes, ansi }) => {
     const meta3 = await readJobMeta(dataDir, jobId);
     if (meta3.kind !== "monitor") throw new Error(`${jobId} \u4E0D\u662F\u76D1\u89C6\u4F5C\u4E1A\uFF1B\u8BFB\u53D6\u65E5\u5FD7\u8BF7\u7528 esp32_job_logs\u3002`);
-    const chunk = await readJobLogs(dataDir, jobId, cursor ?? 0, maxBytes ?? 32 * 1024);
+    const chunk = await readJobLogs(dataDir, jobId, cursor ?? 0, maxBytes ?? 32 * 1024, ansi ?? false);
     return {
       content: [{ type: "text", text: chunk.text ? `[${chunk.status}] ${chunk.text}` : `[${chunk.status}] \u6682\u65E0\u65B0\u8F93\u51FA\u3002` }],
       structuredContent: chunk

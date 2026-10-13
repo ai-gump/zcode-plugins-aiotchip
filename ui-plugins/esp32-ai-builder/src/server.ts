@@ -5,7 +5,7 @@
 // stdout 只输出 MCP 协议消息；诊断日志走 stderr。
 import { mkdir, readFile } from "node:fs/promises";
 import { existsSync } from "node:fs";
-import { dirname, isAbsolute, join } from "node:path";
+import { basename, dirname, isAbsolute, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
@@ -42,7 +42,7 @@ import {
 } from "./idf";
 import { listSerialPorts } from "./serial";
 
-const PLUGIN_VERSION = "0.3.0";
+const PLUGIN_VERSION = "0.4.0";
 const HTML_MIME = "text/html;profile=mcp-app";
 const DIST_DIR = dirname(fileURLToPath(import.meta.url));
 
@@ -664,15 +664,21 @@ server.registerTool(
     title: "Start the serial monitor",
     description:
       "Start reading a serial port in the background (pyserial helper from the IDF python environment); " +
-      "raw bytes are appended to the job log. Read incrementally with esp32_monitor_read. " +
+      "raw bytes are appended to the job log. Read incrementally with esp32_monitor_read " +
+      "(pass ansi:true to keep raw color codes for UI rendering). " +
+      "With logToFile:true, timestamped lines are also written to <workspace>/log/session_<port>_<timestamp>.log. " +
       "One port can only be monitored by one job at a time.",
     inputSchema: {
       port: z.string().describe("Serial port, e.g. /dev/tty.usbmodem*"),
       baud: z.number().optional().describe("Baud rate (default 115200)"),
+      logToFile: z
+        .boolean()
+        .optional()
+        .describe("Also write timestamped lines to <workspace>/log/session_<port>_<timestamp>.log"),
     },
     _meta: MODEL_AND_APP,
   },
-  async ({ port, baud }) => {
+  async ({ port, baud, logToFile }) => {
     const { idfPython } = await requireIdf();
     if (!idfPython) {
       throw new Error("串口监视需要 IDF python 环境（pyserial）；请先 esp32_env_check 并完成安装。");
@@ -683,21 +689,48 @@ server.registerTool(
     }
     const helper = join(DIST_DIR, "serial-helper.py");
     if (!existsSync(helper)) throw new Error("安装产物缺少 serial-helper.py；请重装插件。");
+    let logfile: string | undefined;
+    if (logToFile) {
+      const portShort = basename(target).replace(/[^A-Za-z0-9._-]/g, "_");
+      const now = new Date();
+      const pad = (n: number) => String(n).padStart(2, "0");
+      const stamp =
+        `${now.getFullYear()}${pad(now.getMonth() + 1)}${pad(now.getDate())}` +
+        `_${pad(now.getHours())}${pad(now.getMinutes())}${pad(now.getSeconds())}`;
+      const dir = join(workspaceRoot, "log");
+      await mkdir(dir, { recursive: true });
+      logfile = join(dir, `session_${portShort}_${stamp}.log`);
+    }
     const meta = await startJob({
       dataDir,
       kind: "monitor",
       title: `serial monitor → ${target}`,
       command: (jobDir) =>
-        `${shellQuote(idfPython)} ${shellQuote(helper)} --port ${shellQuote(target)} --baud ${baud ?? 115200} --log ${shellQuote(join(jobDir, "log"))}`,
-      context: { port: target },
+        `${shellQuote(idfPython)} ${shellQuote(helper)} --port ${shellQuote(target)} --baud ${baud ?? 115200} ` +
+        `--log ${shellQuote(join(jobDir, "log"))}` +
+        (logfile ? ` --logfile ${shellQuote(logfile)}` : ""),
+      context: { port: target, ...(logfile ? { logfile } : {}) },
       onExit: () => {
         if (serialLock.get(target) === meta.id) serialLock.delete(target);
       },
     });
     serialLock.set(target, meta.id);
     return {
-      content: [{ type: "text", text: `串口监视已启动（${target}@${baud ?? 115200}）。用 esp32_monitor_read { jobId: "${meta.id}" } 增量读取。` }],
-      structuredContent: { ...jobRef(meta), port: target, baud: baud ?? 115200 },
+      content: [
+        {
+          type: "text",
+          text:
+            `串口监视已启动（${target}@${baud ?? 115200}）。` +
+            (logfile ? `日志落盘：${logfile}。` : "") +
+            ` 用 esp32_monitor_read { jobId: "${meta.id}" } 增量读取。`,
+        },
+      ],
+      structuredContent: {
+        ...jobRef(meta),
+        port: target,
+        baud: baud ?? 115200,
+        ...(logfile ? { logfile } : {}),
+      },
     };
   },
 );
@@ -706,18 +739,22 @@ server.registerTool(
   "esp32_monitor_read",
   {
     title: "Read monitor output",
-    description: "Incrementally read the monitor job's serial output from a byte cursor.",
+    description:
+      "Incrementally read the monitor job's serial output from a byte cursor. " +
+      "Pass ansi:true to keep raw ANSI color codes (for terminal-style UI rendering); " +
+      "default output is ANSI-stripped plain text.",
     inputSchema: {
       jobId: z.string().describe("Monitor job id"),
       cursor: z.number().optional().describe("Byte offset from the previous call (0 for first read)"),
       maxBytes: z.number().optional().describe("Max bytes to return (default 32768)"),
+      ansi: z.boolean().optional().describe("Keep raw ANSI color codes (default false)"),
     },
     _meta: MODEL_AND_APP,
   },
-  async ({ jobId, cursor, maxBytes }) => {
+  async ({ jobId, cursor, maxBytes, ansi }) => {
     const meta = await readJobMeta(dataDir, jobId);
     if (meta.kind !== "monitor") throw new Error(`${jobId} 不是监视作业；读取日志请用 esp32_job_logs。`);
-    const chunk = await readJobLogs(dataDir, jobId, cursor ?? 0, maxBytes ?? 32 * 1024);
+    const chunk = await readJobLogs(dataDir, jobId, cursor ?? 0, maxBytes ?? 32 * 1024, ansi ?? false);
     return {
       content: [{ type: "text", text: chunk.text ? `[${chunk.status}] ${chunk.text}` : `[${chunk.status}] 暂无新输出。` }],
       structuredContent: chunk,

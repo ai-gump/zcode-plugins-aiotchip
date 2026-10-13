@@ -134,12 +134,13 @@ export interface JobLogChunk {
   status: JobStatus;
 }
 
-/** 从字节游标增量读取日志；默认每片 32 KiB，返回新游标。 */
+/** 从字节游标增量读取日志；默认每片 32 KiB，返回新游标。keepAnsi 供面板着色渲染。 */
 export async function readJobLogs(
   dataDir: string,
   jobId: string,
   cursor = 0,
   maxBytes = 32 * 1024,
+  keepAnsi = false,
 ): Promise<JobLogChunk> {
   const dir = await jobDir(dataDir, jobId);
   const meta = await readJobMeta(dataDir, jobId);
@@ -151,7 +152,13 @@ export async function readJobLogs(
     const length = Math.min(maxBytes, size - start);
     const buffer = Buffer.alloc(length);
     if (length > 0) await handle.read(buffer, 0, length, start);
-    return { cursor: start + length, size, text: stripAnsi(buffer.toString("utf8")), status: meta.status };
+    const text = buffer.toString("utf8");
+    return {
+      cursor: start + length,
+      size,
+      text: keepAnsi ? text : stripAnsi(text),
+      status: meta.status,
+    };
   } finally {
     await handle.close();
   }
