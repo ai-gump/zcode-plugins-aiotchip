@@ -99,6 +99,19 @@ pre {
 .log-toggle { margin-left: auto; display: flex; align-items: center; gap: 4px; color: var(--muted); cursor: pointer; }
 .log-toggle input[type="checkbox"] { width: 16px; height: 16px; accent-color: var(--accent); margin: 0; }
 
+#sel-menu {
+  position: fixed; z-index: 20; display: flex; overflow: hidden;
+  background: var(--card); border: 1px solid var(--line); border-radius: 8px;
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.25);
+}
+#sel-menu[hidden] { display: none; }
+#sel-menu button {
+  border: none; background: none; color: var(--fg); cursor: pointer;
+  padding: 6px 12px; font: 12px/1.4 inherit; white-space: nowrap;
+}
+#sel-menu button:hover { background: var(--line); }
+#sel-menu button + button { border-left: 1px solid var(--line); }
+
 /* 串口日志着色（ANSI SGR + 日志级别兜底） */
 #monitor-log .ansi-bold { font-weight: 600; }
 .ansi-30, .ansi-90 { color: #8b949e; }

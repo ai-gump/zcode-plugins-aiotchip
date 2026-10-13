@@ -106,6 +106,19 @@ pre {
 .log-toggle { margin-left: auto; display: flex; align-items: center; gap: 4px; color: var(--muted); cursor: pointer; }
 .log-toggle input[type="checkbox"] { width: 16px; height: 16px; accent-color: var(--accent); margin: 0; }
 
+#sel-menu {
+  position: fixed; z-index: 20; display: flex; overflow: hidden;
+  background: var(--card); border: 1px solid var(--line); border-radius: 8px;
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.25);
+}
+#sel-menu[hidden] { display: none; }
+#sel-menu button {
+  border: none; background: none; color: var(--fg); cursor: pointer;
+  padding: 6px 12px; font: 12px/1.4 inherit; white-space: nowrap;
+}
+#sel-menu button:hover { background: var(--line); }
+#sel-menu button + button { border-left: 1px solid var(--line); }
+
 /* 串口日志着色（ANSI SGR + 日志级别兜底） */
 #monitor-log .ansi-bold { font-weight: 600; }
 .ansi-30, .ansi-90 { color: #8b949e; }
@@ -212,6 +225,10 @@ body[data-theme="light"] .lv-D { color: #0969da; }
       </section>
     </main>
 
+    <div id="sel-menu" hidden>
+      <button data-act="task">添加到当前任务</button>
+      <button data-act="ask">在辅助对话中提问</button>
+    </div>
     <div id="toast" hidden></div>
     <script>"use strict";
 (() => {
@@ -26819,7 +26836,7 @@ container holding the app. Specify either width or maxWidth, and either height o
 
   // ui/panel-client.mjs
   var app = new l(
-    { name: "esp32-ai-builder-panel", version: "0.4.2" },
+    { name: "esp32-ai-builder-panel", version: "0.4.3" },
     { availableDisplayModes: ["inline", "fullscreen"] }
   );
   var $ = (id) => document.getElementById(id);
@@ -27198,6 +27215,60 @@ container holding the app. Specify either width or maxWidth, and either height o
   $("monitor-input").onkeydown = (event) => {
     if (event.key === "Enter") sendFromInput();
   };
+  var selMenu = $("sel-menu");
+  var selText = "";
+  document.addEventListener("mouseup", () => {
+    setTimeout(() => {
+      const sel = window.getSelection();
+      const text = sel?.toString().trim() ?? "";
+      const inLog = Boolean(sel?.anchorNode && $("monitor-log").contains(sel.anchorNode));
+      if (!text || !text.length || !inLog || !monitorLogVisible()) {
+        selMenu.hidden = true;
+        return;
+      }
+      selText = text;
+      const rect = sel.getRangeAt(0).getBoundingClientRect();
+      const left = Math.min(Math.max(8, rect.left + rect.width / 2 - 90), window.innerWidth - 190);
+      selMenu.style.left = `${left}px`;
+      selMenu.style.top = `${rect.top >= 52 ? rect.top - 42 : rect.bottom + 8}px`;
+      selMenu.hidden = false;
+    }, 10);
+  });
+  function monitorLogVisible() {
+    const page = document.getElementById("tab-monitor");
+    return page && !page.hidden;
+  }
+  document.addEventListener("mousedown", (event) => {
+    if (!selMenu.contains(event.target)) selMenu.hidden = true;
+  });
+  document.addEventListener("scroll", () => selMenu.hidden = true, true);
+  selMenu.addEventListener("click", (event) => {
+    const act = event.target?.dataset?.act;
+    if (!act) return;
+    const truncated = selText.length > 4e3 ? `${selText.slice(0, 4e3)}
+\u2026\uFF08\u5DF2\u622A\u65AD\uFF09` : selText;
+    selMenu.hidden = true;
+    window.getSelection()?.removeAllRanges();
+    if (act === "task") {
+      guard(async () => {
+        await app.updateModelContext({
+          content: `\u3010\u4E32\u53E3\u65E5\u5FD7\u9009\u6BB5\uFF08\u7528\u6237\u5728\u9762\u677F\u4E2D\u9009\u4E2D\uFF09\u3011
+${truncated}`
+        });
+        toast("\u5DF2\u6DFB\u52A0\u5230\u8F93\u5165\u533A\u4E0A\u4E0B\u6587\uFF0C\u53EF\u7EE7\u7EED\u63D0\u95EE");
+      });
+    } else {
+      guard(async () => {
+        await app.sendMessage({
+          role: "user",
+          content: `\u8BF7\u5E2E\u6211\u5206\u6790\u8FD9\u6BB5\u4E32\u53E3\u65E5\u5FD7\u8F93\u51FA\uFF1A
+
+${truncated}`
+        });
+        toast("\u5DF2\u53D1\u9001\u5230\u5BF9\u8BDD");
+      });
+    }
+  });
   $("port").onclick = () => refreshEnv();
   $("monitor-port").onclick = () => refreshEnv();
   async function pollMonitor() {

@@ -2,7 +2,7 @@
 import { App } from "@modelcontextprotocol/ext-apps";
 
 const app = new App(
-  { name: "esp32-ai-builder-panel", version: "0.4.2" },
+  { name: "esp32-ai-builder-panel", version: "0.4.3" },
   { availableDisplayModes: ["inline", "fullscreen"] },
 );
 
@@ -428,6 +428,63 @@ $("btn-monitor-send").onclick = sendFromInput;
 $("monitor-input").onkeydown = (event) => {
   if (event.key === "Enter") sendFromInput();
 };
+
+/* ---------- 日志选区浮窗：选中文本 → 对话 ---------- */
+
+const selMenu = $("sel-menu");
+let selText = "";
+
+document.addEventListener("mouseup", () => {
+  setTimeout(() => {
+    const sel = window.getSelection();
+    const text = sel?.toString().trim() ?? "";
+    const inLog = Boolean(sel?.anchorNode && $("monitor-log").contains(sel.anchorNode));
+    if (!text || !text.length || !inLog || !monitorLogVisible()) {
+      selMenu.hidden = true;
+      return;
+    }
+    selText = text;
+    const rect = sel.getRangeAt(0).getBoundingClientRect();
+    const left = Math.min(Math.max(8, rect.left + rect.width / 2 - 90), window.innerWidth - 190);
+    selMenu.style.left = `${left}px`;
+    selMenu.style.top = `${rect.top >= 52 ? rect.top - 42 : rect.bottom + 8}px`;
+    selMenu.hidden = false;
+  }, 10);
+});
+
+function monitorLogVisible() {
+  const page = document.getElementById("tab-monitor");
+  return page && !page.hidden;
+}
+
+document.addEventListener("mousedown", (event) => {
+  if (!selMenu.contains(event.target)) selMenu.hidden = true;
+});
+document.addEventListener("scroll", () => (selMenu.hidden = true), true);
+
+selMenu.addEventListener("click", (event) => {
+  const act = event.target?.dataset?.act;
+  if (!act) return;
+  const truncated = selText.length > 4000 ? `${selText.slice(0, 4000)}\n…（已截断）` : selText;
+  selMenu.hidden = true;
+  window.getSelection()?.removeAllRanges();
+  if (act === "task") {
+    guard(async () => {
+      await app.updateModelContext({
+        content: `【串口日志选段（用户在面板中选中）】\n${truncated}`,
+      });
+      toast("已添加到输入区上下文，可继续提问");
+    });
+  } else {
+    guard(async () => {
+      await app.sendMessage({
+        role: "user",
+        content: `请帮我分析这段串口日志输出：\n\n${truncated}`,
+      });
+      toast("已发送到对话");
+    });
+  }
+});
 
 // 点开串口下拉即刻刷新列表（两个 Tab 共用同一环境数据）
 $("port").onclick = () => refreshEnv();
