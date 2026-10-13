@@ -62,9 +62,11 @@ pre {
   font-size: 12px; max-width: 90%; text-align: center;
 }
 
-/* 串口监视：日志主区 + 右侧 UART 命令栏 + 底部发送条 */
-.monitor-layout { display: flex; gap: 8px; align-items: stretch; margin-top: 6px; }
-#monitor-log { flex: 1 1 auto; min-width: 0; height: 46vh; max-height: 560px; margin: 0; }
+/* 串口监视：日志主区 + 右侧 UART 命令栏撑满剩余高度，发送条固定底部 */
+#tab-monitor { display: flex; flex-direction: column; height: 580px; }
+#tab-monitor .row.buttons, #tab-monitor #monitor-status, #tab-monitor .send-bar { flex: 0 0 auto; }
+.monitor-layout { flex: 1 1 auto; min-height: 0; display: flex; gap: 8px; align-items: stretch; margin-top: 6px; }
+#monitor-log { flex: 1 1 auto; min-width: 0; height: 100%; max-height: none; margin: 0; }
 #cmd-panel {
   flex: 0 0 184px; display: flex; flex-direction: column; min-height: 0;
   border: 1px solid var(--line); border-radius: 8px; background: var(--card); overflow: hidden;
@@ -87,9 +89,10 @@ pre {
 .cmd-btn:hover { background: var(--line); }
 .cmd-btn span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .cmd-dot { width: 8px; height: 8px; border-radius: 50%; background: #2ea043; flex: 0 0 auto; }
-.cmd-del { border: none; background: none; color: var(--muted); cursor: pointer; padding: 2px 4px; visibility: hidden; flex: 0 0 auto; }
-.cmd-item:hover .cmd-del { visibility: visible; }
+.cmd-del, .cmd-edit { border: none; background: none; color: var(--muted); cursor: pointer; padding: 2px 4px; visibility: hidden; flex: 0 0 auto; }
+.cmd-item:hover .cmd-del, .cmd-item:hover .cmd-edit { visibility: visible; }
 .cmd-del:hover { color: #f85149; }
+.cmd-edit:hover { color: var(--accent); }
 #cmd-form { display: flex; flex-direction: column; gap: 5px; padding: 8px 6px; border-top: 1px solid var(--line); }
 #cmd-form[hidden] { display: none; }
 #cmd-form input { width: 100%; font-size: 12px; }
@@ -26816,7 +26819,7 @@ container holding the app. Specify either width or maxWidth, and either height o
 
   // ui/panel-client.mjs
   var app = new l(
-    { name: "esp32-ai-builder-panel", version: "0.4.1" },
+    { name: "esp32-ai-builder-panel", version: "0.4.2" },
     { availableDisplayModes: ["inline", "fullscreen"] }
   );
   var $ = (id) => document.getElementById(id);
@@ -27041,6 +27044,8 @@ container holding the app. Specify either width or maxWidth, and either height o
   }
   appendMonitorLog.pending = "";
   var uartCommands = [];
+  var editIndex = -1;
+  var pendingSendTimer = null;
   async function loadCommands() {
     try {
       const data = await call("esp32_uart_commands_get", {});
@@ -27073,13 +27078,25 @@ container holding the app. Specify either width or maxWidth, and either height o
         row.className = "cmd-item";
         const btn = document.createElement("button");
         btn.className = "cmd-btn";
-        btn.title = `${item.text}${item.newline !== false ? "\\n" : ""}`;
+        btn.title = `${item.text}${item.newline !== false ? "\\n" : ""}\uFF08\u53CC\u51FB\u7F16\u8F91\uFF09`;
         const dot = document.createElement("span");
         dot.className = "cmd-dot";
         const label = document.createElement("span");
         label.textContent = item.label;
         btn.append(dot, label);
-        btn.onclick = () => sendCommand(item);
+        btn.onclick = () => {
+          clearTimeout(pendingSendTimer);
+          pendingSendTimer = setTimeout(() => sendCommand(item), 250);
+        };
+        btn.ondblclick = () => {
+          clearTimeout(pendingSendTimer);
+          openCmdForm(item.index);
+        };
+        const edit = document.createElement("button");
+        edit.className = "cmd-edit";
+        edit.title = "\u7F16\u8F91";
+        edit.textContent = "\u270E";
+        edit.onclick = () => openCmdForm(item.index);
         const del = document.createElement("button");
         del.className = "cmd-del";
         del.title = "\u5220\u9664";
@@ -27089,7 +27106,7 @@ container holding the app. Specify either width or maxWidth, and either height o
           await call("esp32_uart_commands_set", { commands: uartCommands });
           renderCommands();
         });
-        row.append(btn, del);
+        row.append(btn, edit, del);
         list.appendChild(row);
       }
     }
@@ -27108,26 +27125,35 @@ container holding the app. Specify either width or maxWidth, and either height o
       toast(`\u5DF2\u53D1\u9001 ${item.label}`);
     });
   }
-  $("cmd-add").onclick = () => {
-    $("cmd-label").value = "";
-    $("cmd-text").value = "";
-    $("cmd-group").value = "";
-    $("cmd-newline").checked = true;
+  function openCmdForm(index) {
+    editIndex = index;
+    const item = index >= 0 ? uartCommands[index] : null;
+    $("cmd-label").value = item?.label ?? "";
+    $("cmd-text").value = item?.text ?? "";
+    $("cmd-group").value = item?.group ?? "";
+    $("cmd-newline").checked = item ? item.newline !== false : true;
     $("cmd-form").hidden = false;
     $("cmd-label").focus();
+  }
+  $("cmd-add").onclick = () => openCmdForm(-1);
+  $("cmd-cancel").onclick = () => {
+    editIndex = -1;
+    $("cmd-form").hidden = true;
   };
-  $("cmd-cancel").onclick = () => $("cmd-form").hidden = true;
   $("cmd-save").onclick = () => guard(async () => {
     const label = $("cmd-label").value.trim();
     const text = $("cmd-text").value;
     if (!label || !text) throw new Error("\u540D\u79F0\u548C\u53D1\u9001\u5185\u5BB9\u90FD\u4E0D\u80FD\u4E3A\u7A7A");
-    if (uartCommands.length >= 100) throw new Error("\u6700\u591A 100 \u6761\u547D\u4EE4");
-    uartCommands.push({
+    if (editIndex < 0 && uartCommands.length >= 100) throw new Error("\u6700\u591A 100 \u6761\u547D\u4EE4");
+    const entry = {
       label,
       text,
       newline: $("cmd-newline").checked,
       ...$("cmd-group").value.trim() ? { group: $("cmd-group").value.trim() } : {}
-    });
+    };
+    if (editIndex >= 0) uartCommands[editIndex] = entry;
+    else uartCommands.push(entry);
+    editIndex = -1;
     await call("esp32_uart_commands_set", { commands: uartCommands });
     $("cmd-form").hidden = true;
     renderCommands();

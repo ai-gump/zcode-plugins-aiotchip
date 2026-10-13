@@ -55,9 +55,11 @@ pre {
   font-size: 12px; max-width: 90%; text-align: center;
 }
 
-/* 串口监视：日志主区 + 右侧 UART 命令栏 + 底部发送条 */
-.monitor-layout { display: flex; gap: 8px; align-items: stretch; margin-top: 6px; }
-#monitor-log { flex: 1 1 auto; min-width: 0; height: 46vh; max-height: 560px; margin: 0; }
+/* 串口监视：日志主区 + 右侧 UART 命令栏撑满剩余高度，发送条固定底部 */
+#tab-monitor { display: flex; flex-direction: column; height: 580px; }
+#tab-monitor .row.buttons, #tab-monitor #monitor-status, #tab-monitor .send-bar { flex: 0 0 auto; }
+.monitor-layout { flex: 1 1 auto; min-height: 0; display: flex; gap: 8px; align-items: stretch; margin-top: 6px; }
+#monitor-log { flex: 1 1 auto; min-width: 0; height: 100%; max-height: none; margin: 0; }
 #cmd-panel {
   flex: 0 0 184px; display: flex; flex-direction: column; min-height: 0;
   border: 1px solid var(--line); border-radius: 8px; background: var(--card); overflow: hidden;
@@ -80,9 +82,10 @@ pre {
 .cmd-btn:hover { background: var(--line); }
 .cmd-btn span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .cmd-dot { width: 8px; height: 8px; border-radius: 50%; background: #2ea043; flex: 0 0 auto; }
-.cmd-del { border: none; background: none; color: var(--muted); cursor: pointer; padding: 2px 4px; visibility: hidden; flex: 0 0 auto; }
-.cmd-item:hover .cmd-del { visibility: visible; }
+.cmd-del, .cmd-edit { border: none; background: none; color: var(--muted); cursor: pointer; padding: 2px 4px; visibility: hidden; flex: 0 0 auto; }
+.cmd-item:hover .cmd-del, .cmd-item:hover .cmd-edit { visibility: visible; }
 .cmd-del:hover { color: #f85149; }
+.cmd-edit:hover { color: var(--accent); }
 #cmd-form { display: flex; flex-direction: column; gap: 5px; padding: 8px 6px; border-top: 1px solid var(--line); }
 #cmd-form[hidden] { display: none; }
 #cmd-form input { width: 100%; font-size: 12px; }

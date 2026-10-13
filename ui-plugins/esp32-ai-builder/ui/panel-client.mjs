@@ -2,7 +2,7 @@
 import { App } from "@modelcontextprotocol/ext-apps";
 
 const app = new App(
-  { name: "esp32-ai-builder-panel", version: "0.4.1" },
+  { name: "esp32-ai-builder-panel", version: "0.4.2" },
   { availableDisplayModes: ["inline", "fullscreen"] },
 );
 
@@ -259,6 +259,8 @@ appendMonitorLog.pending = "";
 /* ---------- 串口监视 ---------- */
 
 let uartCommands = [];
+let editIndex = -1;
+let pendingSendTimer = null;
 
 async function loadCommands() {
   try {
@@ -293,13 +295,26 @@ function renderCommands() {
       row.className = "cmd-item";
       const btn = document.createElement("button");
       btn.className = "cmd-btn";
-      btn.title = `${item.text}${item.newline !== false ? "\\n" : ""}`;
+      btn.title = `${item.text}${item.newline !== false ? "\\n" : ""}（双击编辑）`;
       const dot = document.createElement("span");
       dot.className = "cmd-dot";
       const label = document.createElement("span");
       label.textContent = item.label;
       btn.append(dot, label);
-      btn.onclick = () => sendCommand(item);
+      // 单击发送（延迟以区分双击）；双击进入编辑态
+      btn.onclick = () => {
+        clearTimeout(pendingSendTimer);
+        pendingSendTimer = setTimeout(() => sendCommand(item), 250);
+      };
+      btn.ondblclick = () => {
+        clearTimeout(pendingSendTimer);
+        openCmdForm(item.index);
+      };
+      const edit = document.createElement("button");
+      edit.className = "cmd-edit";
+      edit.title = "编辑";
+      edit.textContent = "✎";
+      edit.onclick = () => openCmdForm(item.index);
       const del = document.createElement("button");
       del.className = "cmd-del";
       del.title = "删除";
@@ -310,7 +325,7 @@ function renderCommands() {
           await call("esp32_uart_commands_set", { commands: uartCommands });
           renderCommands();
         });
-      row.append(btn, del);
+      row.append(btn, edit, del);
       list.appendChild(row);
     }
   }
@@ -331,27 +346,37 @@ function sendCommand(item) {
   });
 }
 
-$("cmd-add").onclick = () => {
-  $("cmd-label").value = "";
-  $("cmd-text").value = "";
-  $("cmd-group").value = "";
-  $("cmd-newline").checked = true;
+function openCmdForm(index) {
+  editIndex = index;
+  const item = index >= 0 ? uartCommands[index] : null;
+  $("cmd-label").value = item?.label ?? "";
+  $("cmd-text").value = item?.text ?? "";
+  $("cmd-group").value = item?.group ?? "";
+  $("cmd-newline").checked = item ? item.newline !== false : true;
   $("cmd-form").hidden = false;
   $("cmd-label").focus();
+}
+
+$("cmd-add").onclick = () => openCmdForm(-1);
+$("cmd-cancel").onclick = () => {
+  editIndex = -1;
+  $("cmd-form").hidden = true;
 };
-$("cmd-cancel").onclick = () => ($("cmd-form").hidden = true);
 $("cmd-save").onclick = () =>
   guard(async () => {
     const label = $("cmd-label").value.trim();
     const text = $("cmd-text").value;
     if (!label || !text) throw new Error("名称和发送内容都不能为空");
-    if (uartCommands.length >= 100) throw new Error("最多 100 条命令");
-    uartCommands.push({
+    if (editIndex < 0 && uartCommands.length >= 100) throw new Error("最多 100 条命令");
+    const entry = {
       label,
       text,
       newline: $("cmd-newline").checked,
       ...($("cmd-group").value.trim() ? { group: $("cmd-group").value.trim() } : {}),
-    });
+    };
+    if (editIndex >= 0) uartCommands[editIndex] = entry;
+    else uartCommands.push(entry);
+    editIndex = -1;
     await call("esp32_uart_commands_set", { commands: uartCommands });
     $("cmd-form").hidden = true;
     renderCommands();
