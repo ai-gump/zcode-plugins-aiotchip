@@ -22,6 +22,7 @@ import {
 import {
   cancelJob,
   getJobChild,
+  patchJobMeta,
   readJobLogs,
   readJobMeta,
   reapStaleJobs,
@@ -43,7 +44,7 @@ import {
 } from "./idf";
 import { listSerialPorts } from "./serial";
 
-const PLUGIN_VERSION = "0.4.8";
+const PLUGIN_VERSION = "0.4.9";
 const HTML_MIME = "text/html;profile=mcp-app";
 const DIST_DIR = dirname(fileURLToPath(import.meta.url));
 
@@ -831,6 +832,56 @@ server.registerTool(
 );
 
 server.registerTool(
+  "esp32_monitor_log_toggle",
+  {
+    title: "Toggle monitor log file",
+    description:
+      "Turn the monitor's timestamped session log on/off immediately while monitoring. " +
+      "Turning it on creates a NEW log file (<workspace>/log/session_<port>_<timestamp>.log); " +
+      "stopping the monitor always closes the current file.",
+    inputSchema: {
+      jobId: z.string().describe("Monitor job id"),
+      enabled: z.boolean().describe("true to open a new log file now, false to close it"),
+    },
+    _meta: MODEL_AND_APP,
+  },
+  async ({ jobId, enabled }) => {
+    const meta = await readJobMeta(dataDir, jobId);
+    if (meta.kind !== "monitor" || meta.status !== "running") {
+      throw new Error(`监视作业 ${jobId} 不在运行（${meta.status}）。`);
+    }
+    const stdin = getJobChild(jobId)?.stdin;
+    if (!stdin || stdin.destroyed) {
+      throw new Error("无法连接监视进程；请重新 esp32_monitor_start。");
+    }
+    if (!enabled) {
+      stdin.write(JSON.stringify({ cmd: "logoff" }) + "\n");
+      await patchJobMeta(dataDir, jobId, { context: { ...(meta.context ?? {}), logfile: "" } });
+      return {
+        content: [{ type: "text", text: "日志落盘已关闭。" }],
+        structuredContent: { jobId, enabled: false, logfile: null },
+      };
+    }
+    const port = meta.context?.port ?? "unknown";
+    const portShort = basename(port).replace(/[^A-Za-z0-9._-]/g, "_");
+    const now = new Date();
+    const pad = (n: number) => String(n).padStart(2, "0");
+    const stamp =
+      `${now.getFullYear()}${pad(now.getMonth() + 1)}${pad(now.getDate())}` +
+      `_${pad(now.getHours())}${pad(now.getMinutes())}${pad(now.getSeconds())}`;
+    const dir = join(workspaceRoot, "log");
+    await mkdir(dir, { recursive: true });
+    const logfile = join(dir, `session_${portShort}_${stamp}.log`);
+    stdin.write(JSON.stringify({ cmd: "logon", logfile }) + "\n");
+    await patchJobMeta(dataDir, jobId, { context: { ...(meta.context ?? {}), logfile } });
+    return {
+      content: [{ type: "text", text: `日志落盘已开启：${logfile}` }],
+      structuredContent: { jobId, enabled: true, logfile },
+    };
+  },
+);
+
+server.registerTool(
   "esp32_monitor_send",
   {
     title: "Send input to the device",
@@ -856,8 +907,10 @@ server.registerTool(
         "无法连接监视进程的发送通道（服务可能重启过）；请 esp32_monitor_stop 后重新 esp32_monitor_start。",
       );
     }
+    // 解释命令文本里的字面转义（用户习惯输入 version\r\n 之类），避免当普通字符发给设备
+    const interpreted = text.replace(/\\r/g, "\r").replace(/\\n/g, "\n");
     await new Promise<void>((resolve, reject) => {
-      stdin.write(JSON.stringify({ text, newline: newline ?? true }) + "\n", (error) =>
+      stdin.write(JSON.stringify({ text: interpreted, newline: newline ?? true }) + "\n", (error) =>
         error ? reject(error) : resolve(),
       );
     });

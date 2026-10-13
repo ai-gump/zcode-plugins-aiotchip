@@ -336,20 +336,13 @@ function ansiToHtml(data) {
 }
 
 /** 无 ANSI 时的兜底：按 ESP-IDF 日志级别前缀（I/W/E/D/V (毫秒)）整行着色。 */
-function fallbackToHtml(data) {
-  return data
-    .split("\n")
-    .map((line) => {
-      const m = /(?:^|\s)([VDIWE]) \(\d+\)/.exec(line) ?? /\b(ERROR|WARN)\b/.exec(line);
-      let cls = null;
-      if (m) {
-        cls = m[1] === "ERROR" ? "E" : m[1] === "WARN" ? "W" : m[1];
-      }
-      return cls && ["V", "D", "I", "W", "E"].includes(cls)
-        ? `<span class="lv-${cls}">${escapeHtml(line)}</span>`
-        : escapeHtml(line);
-    })
-    .join("\n");
+function fallbackToHtml(line) {
+  const m =
+    /(?:^|>\s*|\s)([VDIWE]) \(\d+\)/.exec(line) ?? /\b(ERROR|WARN)\b/.exec(line);
+  const cls = m ? (m[1] === "ERROR" ? "E" : m[1] === "WARN" ? "W" : m[1]) : null;
+  return cls && ["V", "D", "I", "W", "E"].includes(cls)
+    ? `<span class="lv-${cls}">${escapeHtml(line)}</span>`
+    : escapeHtml(line);
 }
 
 /** 跨 chunk 安全的日志渲染：残留半个颜色序列时扣住，拼到下一段。 */
@@ -366,7 +359,12 @@ function appendMonitorLog(text) {
     }
   }
   if (!data) return;
-  const html = data.includes("\x1b") ? ansiToHtml(data) : fallbackToHtml(data);
+  // 逐行渲染：带 ANSI 的行走 SGR 解析；无颜色码的行按日志级别前缀兜底着色
+  // （混合块里设备无色打印的 I/W/E 行不再漏染）
+  const html = data
+    .split("\n")
+    .map((line) => (line.includes("\x1b") ? ansiToHtml(line) : fallbackToHtml(line)))
+    .join("\n");
   el.insertAdjacentHTML("beforeend", html);
   el.scrollTop = el.scrollHeight;
 }
@@ -496,6 +494,16 @@ $("cmd-save").onclick = () =>
     await call("esp32_uart_commands_set", { commands: uartCommands });
     $("cmd-form").hidden = true;
     renderCommands();
+  });
+
+$("monitor-logfile").onchange = () =>
+  guard(async () => {
+    if (!monitorJob) return; // 未在监视中：仅记住状态，下次开始时生效
+    const enabled = $("monitor-logfile").checked;
+    const data = await call("esp32_monitor_log_toggle", { jobId: monitorJob, enabled });
+    $("monitor-status").textContent = enabled
+      ? `已连接（作业 ${monitorJob}） · 日志: ${data.logfile}`
+      : `已连接（作业 ${monitorJob}） · 日志已关闭`;
   });
 
 $("btn-monitor-start").onclick = () =>

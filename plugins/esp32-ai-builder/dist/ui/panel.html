@@ -27194,15 +27194,10 @@ container holding the app. Specify either width or maxWidth, and either height o
     const classes = [...fg ? [fg] : [], ...open2 > 0 ? ["ansi-bold"] : []];
     return classes.length ? `<span class="${classes.join(" ")}">${html}</span>` : html;
   }
-  function fallbackToHtml(data) {
-    return data.split("\n").map((line) => {
-      const m2 = /(?:^|\s)([VDIWE]) \(\d+\)/.exec(line) ?? /\b(ERROR|WARN)\b/.exec(line);
-      let cls = null;
-      if (m2) {
-        cls = m2[1] === "ERROR" ? "E" : m2[1] === "WARN" ? "W" : m2[1];
-      }
-      return cls && ["V", "D", "I", "W", "E"].includes(cls) ? `<span class="lv-${cls}">${escapeHtml(line)}</span>` : escapeHtml(line);
-    }).join("\n");
+  function fallbackToHtml(line) {
+    const m2 = /(?:^|>\s*|\s)([VDIWE]) \(\d+\)/.exec(line) ?? /\b(ERROR|WARN)\b/.exec(line);
+    const cls = m2 ? m2[1] === "ERROR" ? "E" : m2[1] === "WARN" ? "W" : m2[1] : null;
+    return cls && ["V", "D", "I", "W", "E"].includes(cls) ? `<span class="lv-${cls}">${escapeHtml(line)}</span>` : escapeHtml(line);
   }
   function appendMonitorLog(text) {
     const el = $("monitor-log");
@@ -27217,7 +27212,7 @@ container holding the app. Specify either width or maxWidth, and either height o
       }
     }
     if (!data) return;
-    const html = data.includes("\x1B") ? ansiToHtml(data) : fallbackToHtml(data);
+    const html = data.split("\n").map((line) => line.includes("\x1B") ? ansiToHtml(line) : fallbackToHtml(line)).join("\n");
     el.insertAdjacentHTML("beforeend", html);
     el.scrollTop = el.scrollHeight;
   }
@@ -27336,6 +27331,12 @@ container holding the app. Specify either width or maxWidth, and either height o
     await call("esp32_uart_commands_set", { commands: uartCommands });
     $("cmd-form").hidden = true;
     renderCommands();
+  });
+  $("monitor-logfile").onchange = () => guard(async () => {
+    if (!monitorJob) return;
+    const enabled = $("monitor-logfile").checked;
+    const data = await call("esp32_monitor_log_toggle", { jobId: monitorJob, enabled });
+    $("monitor-status").textContent = enabled ? `\u5DF2\u8FDE\u63A5\uFF08\u4F5C\u4E1A ${monitorJob}\uFF09 \xB7 \u65E5\u5FD7: ${data.logfile}` : `\u5DF2\u8FDE\u63A5\uFF08\u4F5C\u4E1A ${monitorJob}\uFF09 \xB7 \u65E5\u5FD7\u5DF2\u5173\u95ED`;
   });
   $("btn-monitor-start").onclick = () => guard(async () => {
     const port = $("monitor-port").value;

@@ -171,6 +171,25 @@ export async function readJobLogs(
   }
 }
 
+/** 更新作业元数据（如监视日志路径变化），注册表与落盘文件同步。 */
+export async function patchJobMeta(
+  dataDir: string,
+  jobId: string,
+  patch: Partial<JobMeta>,
+): Promise<JobMeta> {
+  const entry = registry.get(jobId);
+  if (entry) {
+    Object.assign(entry.meta, patch);
+    await persist(entry.dir, entry.meta);
+    return entry.meta;
+  }
+  const dir = await jobDir(dataDir, jobId);
+  const meta = JSON.parse(await readFile(join(dir, "meta.json"), "utf8")) as JobMeta;
+  Object.assign(meta, patch);
+  await writeFile(join(dir, "meta.json"), JSON.stringify(meta, null, 2) + "\n");
+  return meta;
+}
+
 /** SIGTERM 整个进程组，3 秒后仍存活则 SIGKILL。 */
 export async function cancelJob(dataDir: string, jobId: string): Promise<JobMeta> {
   const meta = await readJobMeta(dataDir, jobId);

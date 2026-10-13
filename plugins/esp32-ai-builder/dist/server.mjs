@@ -36212,6 +36212,19 @@ async function readJobLogs(dataDir2, jobId, cursor = 0, maxBytes = 32 * 1024, ke
     await handle.close();
   }
 }
+async function patchJobMeta(dataDir2, jobId, patch) {
+  const entry = registry2.get(jobId);
+  if (entry) {
+    Object.assign(entry.meta, patch);
+    await persist(entry.dir, entry.meta);
+    return entry.meta;
+  }
+  const dir = await jobDir(dataDir2, jobId);
+  const meta3 = JSON.parse(await readFile(join(dir, "meta.json"), "utf8"));
+  Object.assign(meta3, patch);
+  await writeFile(join(dir, "meta.json"), JSON.stringify(meta3, null, 2) + "\n");
+  return meta3;
+}
 async function cancelJob(dataDir2, jobId) {
   const meta3 = await readJobMeta(dataDir2, jobId);
   if (meta3.status !== "running") return meta3;
@@ -36377,7 +36390,7 @@ async function listSerialPorts() {
 }
 
 // src/server.ts
-var PLUGIN_VERSION = "0.4.8";
+var PLUGIN_VERSION = "0.4.9";
 var HTML_MIME = "text/html;profile=mcp-app";
 var DIST_DIR = dirname(fileURLToPath(import.meta.url));
 var dataDir = process.env.ZCODE_PLUGIN_DATA?.trim() || join4(DIST_DIR, "data");
@@ -37035,6 +37048,50 @@ server.registerTool(
   }
 );
 server.registerTool(
+  "esp32_monitor_log_toggle",
+  {
+    title: "Toggle monitor log file",
+    description: "Turn the monitor's timestamped session log on/off immediately while monitoring. Turning it on creates a NEW log file (<workspace>/log/session_<port>_<timestamp>.log); stopping the monitor always closes the current file.",
+    inputSchema: {
+      jobId: external_exports.string().describe("Monitor job id"),
+      enabled: external_exports.boolean().describe("true to open a new log file now, false to close it")
+    },
+    _meta: MODEL_AND_APP
+  },
+  async ({ jobId, enabled }) => {
+    const meta3 = await readJobMeta(dataDir, jobId);
+    if (meta3.kind !== "monitor" || meta3.status !== "running") {
+      throw new Error(`\u76D1\u89C6\u4F5C\u4E1A ${jobId} \u4E0D\u5728\u8FD0\u884C\uFF08${meta3.status}\uFF09\u3002`);
+    }
+    const stdin = getJobChild(jobId)?.stdin;
+    if (!stdin || stdin.destroyed) {
+      throw new Error("\u65E0\u6CD5\u8FDE\u63A5\u76D1\u89C6\u8FDB\u7A0B\uFF1B\u8BF7\u91CD\u65B0 esp32_monitor_start\u3002");
+    }
+    if (!enabled) {
+      stdin.write(JSON.stringify({ cmd: "logoff" }) + "\n");
+      await patchJobMeta(dataDir, jobId, { context: { ...meta3.context ?? {}, logfile: "" } });
+      return {
+        content: [{ type: "text", text: "\u65E5\u5FD7\u843D\u76D8\u5DF2\u5173\u95ED\u3002" }],
+        structuredContent: { jobId, enabled: false, logfile: null }
+      };
+    }
+    const port = meta3.context?.port ?? "unknown";
+    const portShort = basename(port).replace(/[^A-Za-z0-9._-]/g, "_");
+    const now = /* @__PURE__ */ new Date();
+    const pad = (n) => String(n).padStart(2, "0");
+    const stamp = `${now.getFullYear()}${pad(now.getMonth() + 1)}${pad(now.getDate())}_${pad(now.getHours())}${pad(now.getMinutes())}${pad(now.getSeconds())}`;
+    const dir = join4(workspaceRoot, "log");
+    await mkdir2(dir, { recursive: true });
+    const logfile = join4(dir, `session_${portShort}_${stamp}.log`);
+    stdin.write(JSON.stringify({ cmd: "logon", logfile }) + "\n");
+    await patchJobMeta(dataDir, jobId, { context: { ...meta3.context ?? {}, logfile } });
+    return {
+      content: [{ type: "text", text: `\u65E5\u5FD7\u843D\u76D8\u5DF2\u5F00\u542F\uFF1A${logfile}` }],
+      structuredContent: { jobId, enabled: true, logfile }
+    };
+  }
+);
+server.registerTool(
   "esp32_monitor_send",
   {
     title: "Send input to the device",
@@ -37057,9 +37114,10 @@ server.registerTool(
         "\u65E0\u6CD5\u8FDE\u63A5\u76D1\u89C6\u8FDB\u7A0B\u7684\u53D1\u9001\u901A\u9053\uFF08\u670D\u52A1\u53EF\u80FD\u91CD\u542F\u8FC7\uFF09\uFF1B\u8BF7 esp32_monitor_stop \u540E\u91CD\u65B0 esp32_monitor_start\u3002"
       );
     }
+    const interpreted = text.replace(/\\r/g, "\r").replace(/\\n/g, "\n");
     await new Promise((resolve, reject) => {
       stdin.write(
-        JSON.stringify({ text, newline: newline ?? true }) + "\n",
+        JSON.stringify({ text: interpreted, newline: newline ?? true }) + "\n",
         (error62) => error62 ? reject(error62) : resolve()
       );
     });
