@@ -85,8 +85,12 @@ async function loadChip() {
 $("chip-context").onclick = async () => {
   try {
     await app.updateModelContext({
-      content:
-        "用户在 ESP32 AI 开发台面板中查看了 ESP32-S3 选型信息（双核 LX7 240MHz、512KB SRAM、内置 USB-Serial-JTAG、AI 向量指令），希望围绕 ESP32-S3 继续讨论。",
+      content: [
+        {
+          type: "text",
+          text: "用户在 ESP32 AI 开发台面板中查看了 ESP32-S3 选型信息（双核 LX7 240MHz、512KB SRAM、内置 USB-Serial-JTAG、AI 向量指令），希望围绕 ESP32-S3 继续讨论。",
+        },
+      ],
     });
     toast("已添加到输入区上下文，可继续提问");
   } catch (error) {
@@ -471,7 +475,9 @@ selMenu.addEventListener("click", (event) => {
   if (act === "task") {
     guard(async () => {
       await app.updateModelContext({
-        content: `【串口日志选段（用户在面板中选中）】\n${truncated}`,
+        content: [
+          { type: "text", text: `【串口日志选段（用户在面板中选中）】\n${truncated}` },
+        ],
       });
       toast("已添加到输入区上下文，可继续提问");
     });
@@ -479,7 +485,7 @@ selMenu.addEventListener("click", (event) => {
     guard(async () => {
       await app.sendMessage({
         role: "user",
-        content: `请帮我分析这段串口日志输出：\n\n${truncated}`,
+        content: [{ type: "text", text: `请帮我分析这段串口日志输出：\n\n${truncated}` }],
       });
       toast("已发送到对话");
     });
@@ -545,6 +551,7 @@ async function main() {
   applyTheme();
   loadChip();
   loadCommands();
+  refreshEnv(); // 首次打开即加载串口列表；之后仍按点击刷新
   startPolling();
 }
 main();

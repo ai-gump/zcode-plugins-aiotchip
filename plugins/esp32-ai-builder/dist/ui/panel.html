@@ -26918,7 +26918,12 @@ container holding the app. Specify either width or maxWidth, and either height o
   $("chip-context").onclick = async () => {
     try {
       await app.updateModelContext({
-        content: "\u7528\u6237\u5728 ESP32 AI \u5F00\u53D1\u53F0\u9762\u677F\u4E2D\u67E5\u770B\u4E86 ESP32-S3 \u9009\u578B\u4FE1\u606F\uFF08\u53CC\u6838 LX7 240MHz\u3001512KB SRAM\u3001\u5185\u7F6E USB-Serial-JTAG\u3001AI \u5411\u91CF\u6307\u4EE4\uFF09\uFF0C\u5E0C\u671B\u56F4\u7ED5 ESP32-S3 \u7EE7\u7EED\u8BA8\u8BBA\u3002"
+        content: [
+          {
+            type: "text",
+            text: "\u7528\u6237\u5728 ESP32 AI \u5F00\u53D1\u53F0\u9762\u677F\u4E2D\u67E5\u770B\u4E86 ESP32-S3 \u9009\u578B\u4FE1\u606F\uFF08\u53CC\u6838 LX7 240MHz\u3001512KB SRAM\u3001\u5185\u7F6E USB-Serial-JTAG\u3001AI \u5411\u91CF\u6307\u4EE4\uFF09\uFF0C\u5E0C\u671B\u56F4\u7ED5 ESP32-S3 \u7EE7\u7EED\u8BA8\u8BBA\u3002"
+          }
+        ]
       });
       toast("\u5DF2\u6DFB\u52A0\u5230\u8F93\u5165\u533A\u4E0A\u4E0B\u6587\uFF0C\u53EF\u7EE7\u7EED\u63D0\u95EE");
     } catch (error62) {
@@ -27258,8 +27263,10 @@ container holding the app. Specify either width or maxWidth, and either height o
     if (act === "task") {
       guard(async () => {
         await app.updateModelContext({
-          content: `\u3010\u4E32\u53E3\u65E5\u5FD7\u9009\u6BB5\uFF08\u7528\u6237\u5728\u9762\u677F\u4E2D\u9009\u4E2D\uFF09\u3011
-${truncated}`
+          content: [
+            { type: "text", text: `\u3010\u4E32\u53E3\u65E5\u5FD7\u9009\u6BB5\uFF08\u7528\u6237\u5728\u9762\u677F\u4E2D\u9009\u4E2D\uFF09\u3011
+${truncated}` }
+          ]
         });
         toast("\u5DF2\u6DFB\u52A0\u5230\u8F93\u5165\u533A\u4E0A\u4E0B\u6587\uFF0C\u53EF\u7EE7\u7EED\u63D0\u95EE");
       });
@@ -27267,9 +27274,9 @@ ${truncated}`
       guard(async () => {
         await app.sendMessage({
           role: "user",
-          content: `\u8BF7\u5E2E\u6211\u5206\u6790\u8FD9\u6BB5\u4E32\u53E3\u65E5\u5FD7\u8F93\u51FA\uFF1A
+          content: [{ type: "text", text: `\u8BF7\u5E2E\u6211\u5206\u6790\u8FD9\u6BB5\u4E32\u53E3\u65E5\u5FD7\u8F93\u51FA\uFF1A
 
-${truncated}`
+${truncated}` }]
         });
         toast("\u5DF2\u53D1\u9001\u5230\u5BF9\u8BDD");
       });
@@ -27325,6 +27332,7 @@ ${truncated}`
     applyTheme();
     loadChip();
     loadCommands();
+    refreshEnv();
     startPolling();
   }
   main();
