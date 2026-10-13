@@ -60,11 +60,11 @@
           <input id="monitor-baud" value="115200" class="baud" inputmode="numeric" />
           <button id="btn-monitor-start" class="primary">开始监视</button>
           <button id="btn-monitor-stop" disabled>停止</button>
-          <label class="log-toggle" title="开启后，串口数据按行加时间戳写入 &lt;项目根&gt;/log/session_&lt;串口&gt;_&lt;时间戳&gt;.log（对下次「开始监视」生效）">
+          <label class="log-toggle push" title="开启后，串口数据按行加时间戳写入 &lt;项目根&gt;/log/session_&lt;串口&gt;_&lt;时间戳&gt;.log（对下次「开始监视」生效）">
             <input type="checkbox" id="monitor-logfile" /> 日志
           </label>
           <label class="log-toggle lv-I" title="只显示 Information 级日志（都不勾选 = 显示全部）">
-            <input type="checkbox" id="filter-i" /> I 信息
+            <input type="checkbox" id="filter-i" checked /> I 信息
           </label>
           <label class="log-toggle lv-W" title="只显示 Warning 级日志">
             <input type="checkbox" id="filter-w" /> W 警告

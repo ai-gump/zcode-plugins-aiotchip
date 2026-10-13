@@ -44,7 +44,7 @@ import {
 } from "./idf";
 import { listSerialPorts } from "./serial";
 
-const PLUGIN_VERSION = "0.5.0";
+const PLUGIN_VERSION = "0.5.1";
 const HTML_MIME = "text/html;profile=mcp-app";
 const DIST_DIR = dirname(fileURLToPath(import.meta.url));
 

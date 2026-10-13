@@ -65,7 +65,13 @@ pre {
 #tab-monitor[hidden] { display: none !important; }
 #tab-monitor .row.buttons, #tab-monitor #monitor-status, #tab-monitor .send-bar { flex: 0 0 auto; }
 .monitor-layout { flex: 1 1 auto; min-height: 0; display: flex; gap: 8px; align-items: stretch; margin-top: 6px; }
-#monitor-log { flex: 1 1 auto; min-width: 0; height: 100%; max-height: none; margin: 0; }
+.log-wrap { flex: 1 1 auto; min-width: 0; min-height: 0; display: flex; position: relative; }
+#monitor-log { flex: 1 1 auto; min-width: 0; height: auto; align-self: stretch; max-height: none; margin: 0; }
+#log-jump {
+  position: absolute; right: 14px; bottom: 12px; z-index: 3;
+  background: var(--accent); border: none; color: #fff; border-radius: 999px;
+  padding: 4px 12px; cursor: pointer; font-size: 12px; box-shadow: 0 2px 8px rgba(0,0,0,0.3);
+}
 #cmd-panel {
   flex: 0 0 184px; display: flex; flex-direction: column; min-height: 0;
   border: 1px solid var(--line); border-radius: 8px; background: var(--card); overflow: hidden;
@@ -102,7 +108,9 @@ pre {
 .send-bar input:not([type="checkbox"]) { flex: 1; min-width: 0; }
 .send-bar .nl { display: flex; align-items: center; gap: 3px; color: var(--muted); font-size: 11px; flex: 0 0 auto; }
 
-.log-toggle { margin-left: auto; display: flex; align-items: center; gap: 4px; color: var(--muted); cursor: pointer; }
+.log-toggle { display: flex; align-items: center; gap: 3px; color: var(--muted); cursor: pointer; }
+.log-toggle.push { margin-left: auto; }
+.log-toggle + .log-toggle { margin-left: 8px; }
 .log-toggle input[type="checkbox"] { width: 16px; height: 16px; accent-color: var(--accent); margin: 0; }
 
 #sel-menu {
