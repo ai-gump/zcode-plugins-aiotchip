@@ -62,28 +62,6 @@
         <div id="monitor-status" class="muted">未连接</div>
         <div class="monitor-layout">
           <pre id="monitor-log"></pre>
-          <aside id="cmd-panel">
-            <div class="cmd-head">
-              <span>UART 命令</span>
-              <button id="cmd-add" title="添加命令">＋</button>
-            </div>
-            <div id="cmd-list"><div class="muted cmd-empty">加载中…</div></div>
-            <div id="cmd-form" hidden>
-              <input id="cmd-label" placeholder="名称（如 reboot）" />
-              <input id="cmd-text" placeholder="发送内容" />
-              <input id="cmd-group" placeholder="分组（可选）" />
-              <label class="cmd-nl"><input type="checkbox" id="cmd-newline" checked /> 末尾换行</label>
-              <div class="cmd-form-btns">
-                <button id="cmd-save" class="primary">保存</button>
-                <button id="cmd-cancel">取消</button>
-              </div>
-            </div>
-          </aside>
-        </div>
-        <div class="send-bar">
-          <input id="monitor-input" placeholder="发送到设备…（回车发送）" />
-          <label class="nl" title="末尾追加换行"><input type="checkbox" id="send-newline" checked /> \n</label>
-          <button id="btn-monitor-send" class="primary">发送</button>
         </div>
       </section>
     </main>

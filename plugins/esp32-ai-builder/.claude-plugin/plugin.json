@@ -1,6 +1,6 @@
 {
   "name": "esp32-ai-builder",
-  "version": "0.4.3",
+  "version": "0.4.4",
   "description": "End-to-end ESP32-S3 development for ZCode: chip catalog, ESP-IDF 5.5 environment setup, project creation, build, flash, and serial monitor; debug on the roadmap.",
   "description_i18n": {
     "en": "End-to-end ESP32-S3 development for ZCode: chip catalog, ESP-IDF 5.5 environment setup, project creation, build, flash, and serial monitor; debug on the roadmap.",

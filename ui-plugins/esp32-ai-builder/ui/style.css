@@ -1,9 +1,14 @@
 :root { color-scheme: light dark; }
+html, body { height: 100%; }
 * { box-sizing: border-box; }
 body {
   margin: 0; font: 13px/1.5 -apple-system, "PingFang SC", "Segoe UI", sans-serif;
   background: var(--bg); color: var(--fg);
+  display: flex; flex-direction: column; min-height: 100vh;
 }
+main { flex: 1 1 auto; min-height: 0; display: flex; flex-direction: column; }
+.page { flex: 1 1 auto; min-height: 0; }
+.page[hidden] { display: none !important; }
 body[data-theme="dark"] { --bg: #16181d; --fg: #e8eaed; --muted: #9aa0a6; --card: #22252b; --line: #34383f; --accent: #4c8dff; }
 body[data-theme="light"], body:not([data-theme="dark"]) { --bg: #ffffff; --fg: #1f2328; --muted: #6a737d; --card: #f6f8fa; --line: #d8dee4; --accent: #0969da; }
 
@@ -56,48 +61,15 @@ pre {
 }
 
 /* 串口监视：日志主区 + 右侧 UART 命令栏撑满剩余高度，发送条固定底部 */
-#tab-monitor { display: flex; flex-direction: column; height: 580px; }
-#tab-monitor .row.buttons, #tab-monitor #monitor-status, #tab-monitor .send-bar { flex: 0 0 auto; }
-.monitor-layout { flex: 1 1 auto; min-height: 0; display: flex; gap: 8px; align-items: stretch; margin-top: 6px; }
-#monitor-log { flex: 1 1 auto; min-width: 0; height: 100%; max-height: none; margin: 0; }
-#cmd-panel {
-  flex: 0 0 184px; display: flex; flex-direction: column; min-height: 0;
-  border: 1px solid var(--line); border-radius: 8px; background: var(--card); overflow: hidden;
-}
-.cmd-head {
-  display: flex; justify-content: space-between; align-items: center;
-  padding: 6px 8px; font-weight: 600; font-size: 12px; color: var(--muted);
-  border-bottom: 1px solid var(--line);
-}
-#cmd-add { padding: 0 8px; line-height: 1.4; }
-#cmd-list { overflow-y: auto; flex: 1; padding: 4px; }
-.cmd-empty { padding: 6px; }
-.cmd-group { color: var(--muted); font-size: 11px; padding: 6px 4px 2px; }
-.cmd-item { display: flex; align-items: center; gap: 4px; margin: 1px 0; }
-.cmd-btn {
-  flex: 1; min-width: 0; display: flex; align-items: center; gap: 6px; text-align: left;
-  background: none; border: none; color: var(--fg); padding: 4px 6px;
-  border-radius: 6px; cursor: pointer; font: inherit;
-}
+#tab-monitor { display: flex; flex-direction: column; flex: 1 1 auto; min-height: 480px; }
+#tab-monitor[hidden] { display: none !important; }
+#tab-monitor .row.buttons, #tab-monitor #monitor-status, #tab-monitor .monitor-layout { flex: 1 1 auto; min-height: 0; display: flex; gap: 8px; align-items: stretch; margin-top: 6px; }
+#monitor-log { flex: 1 1 auto; min-width: 0; height: auto; align-self: stretch; max-height: none; margin: 0; }
 .cmd-btn:hover { background: var(--line); }
-.cmd-btn span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.cmd-dot { width: 8px; height: 8px; border-radius: 50%; background: #2ea043; flex: 0 0 auto; }
-.cmd-del, .cmd-edit { border: none; background: none; color: var(--muted); cursor: pointer; padding: 2px 4px; visibility: hidden; flex: 0 0 auto; }
-.cmd-item:hover .cmd-del, .cmd-item:hover .cmd-edit { visibility: visible; }
-.cmd-del:hover { color: #f85149; }
-.cmd-edit:hover { color: var(--accent); }
-#cmd-form { display: flex; flex-direction: column; gap: 5px; padding: 8px 6px; border-top: 1px solid var(--line); }
-#cmd-form[hidden] { display: none; }
-#cmd-form input { width: 100%; font-size: 12px; }
-.cmd-nl { font-size: 11px; color: var(--muted); display: flex; gap: 4px; align-items: center; }
-.cmd-form-btns { display: flex; gap: 4px; }
-.cmd-form-btns button { flex: 1; padding: 4px 6px; font-size: 12px; }
-.send-bar { display: flex; gap: 6px; margin-top: 8px; align-items: center; }
-.send-bar input:not([type="checkbox"]) { flex: 1; min-width: 0; }
-.send-bar .nl { display: flex; align-items: center; gap: 3px; color: var(--muted); font-size: 11px; flex: 0 0 auto; }
 
 .log-toggle { margin-left: auto; display: flex; align-items: center; gap: 4px; color: var(--muted); cursor: pointer; }
 .log-toggle input[type="checkbox"] { width: 16px; height: 16px; accent-color: var(--accent); margin: 0; }
+
 
 #sel-menu {
   position: fixed; z-index: 20; display: flex; overflow: hidden;
