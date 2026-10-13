@@ -36368,7 +36368,7 @@ async function listSerialPorts() {
 }
 
 // src/server.ts
-var PLUGIN_VERSION = "0.2.0";
+var PLUGIN_VERSION = "0.3.0";
 var HTML_MIME = "text/html;profile=mcp-app";
 var DIST_DIR = dirname(fileURLToPath(import.meta.url));
 var dataDir = process.env.ZCODE_PLUGIN_DATA?.trim() || join4(DIST_DIR, "data");
@@ -36991,6 +36991,67 @@ server.registerTool(
     return {
       content: [{ type: "text", text: `\u76D1\u89C6\u4F5C\u4E1A ${jobId} \u5DF2\u505C\u6B62\uFF0C\u4E32\u53E3 ${port ?? "?"} \u5DF2\u91CA\u653E\u3002` }],
       structuredContent: { job: meta3 }
+    };
+  }
+);
+var UART_COMMANDS_DEFAULT = [
+  { label: "version", text: "version", newline: true, group: "\u5E38\u7528" },
+  { label: "status", text: "status", newline: true, group: "\u5E38\u7528" },
+  { label: "reboot", text: "reboot", newline: true, group: "\u5E38\u7528" }
+];
+function uartCommandsFile() {
+  return join4(dataDir, "uart-commands.json");
+}
+var UartCommandSchema = external_exports.object({
+  label: external_exports.string().min(1).max(64).describe("\u6309\u94AE\u663E\u793A\u540D"),
+  text: external_exports.string().min(1).max(512).describe("\u53D1\u9001\u5230\u4E32\u53E3\u7684\u6587\u672C"),
+  newline: external_exports.boolean().optional().describe("\u672B\u5C3E\u8FFD\u52A0\u6362\u884C\uFF08\u9ED8\u8BA4 true\uFF09"),
+  group: external_exports.string().max(32).optional().describe("\u5206\u7EC4\u540D\uFF08\u53EF\u9009\uFF0C\u9ED8\u8BA4\u5F52\u5165\u201C\u547D\u4EE4\u201D\uFF09")
+});
+server.registerTool(
+  "esp32_uart_commands_get",
+  {
+    title: "List custom UART commands",
+    description: "List the panel's custom UART command buttons (persisted in the plugin data directory). Returns the built-in defaults when nothing has been customized.",
+    inputSchema: {},
+    _meta: { ui: { visibility: ["app"] } }
+  },
+  async () => {
+    let commands = UART_COMMANDS_DEFAULT;
+    if (existsSync3(uartCommandsFile())) {
+      try {
+        const parsed = JSON.parse(await readFile2(uartCommandsFile(), "utf8"));
+        if (Array.isArray(parsed) && parsed.length > 0) commands = parsed;
+      } catch {
+      }
+    }
+    return {
+      content: [{ type: "text", text: `${commands.length} \u6761\u81EA\u5B9A\u4E49 UART \u547D\u4EE4\u3002` }],
+      structuredContent: { commands }
+    };
+  }
+);
+server.registerTool(
+  "esp32_uart_commands_set",
+  {
+    title: "Save custom UART commands",
+    description: "Replace the panel's custom UART command buttons (persisted in the plugin data directory, so they survive sessions and restarts). Pass the full list; 100 entries max.",
+    inputSchema: {
+      commands: external_exports.array(UartCommandSchema).max(100).describe("Full command list")
+    },
+    _meta: { ui: { visibility: ["app"] } }
+  },
+  async ({ commands }) => {
+    const normalized = commands.map((c) => ({
+      label: c.label,
+      text: c.text,
+      newline: c.newline ?? true,
+      ...c.group ? { group: c.group } : {}
+    }));
+    await writeFileText(uartCommandsFile(), JSON.stringify(normalized, null, 2) + "\n");
+    return {
+      content: [{ type: "text", text: `\u5DF2\u4FDD\u5B58 ${normalized.length} \u6761\u81EA\u5B9A\u4E49 UART \u547D\u4EE4\u3002` }],
+      structuredContent: { commands: normalized }
     };
   }
 );

@@ -16,9 +16,10 @@ End-to-end ESP32-S3 development for ZCode: chip catalog, ESP-IDF 5.5 environment
 | `esp32_build` / `esp32_flash` / `esp32_size` | Build / flash / size as background jobs (jobId + log tail tools). Flash **overwrites device flash**. |
 | `esp32_job_status` / `esp32_job_logs` / `esp32_job_cancel` | Job management with cursor-based incremental logs. |
 | `esp32_monitor_start/read/send/stop` | Serial monitor (pyserial helper from the IDF python env), one port at a time. |
+| `esp32_uart_commands_get/set` | Panel-customizable UART command buttons (persisted in the plugin data directory, max 100). |
 | SDK config | `esp32_sdkconfig_get/set` read `sdkconfig.json` and write `sdkconfig.defaults` (+ patch active `sdkconfig`). |
 
-The **ESP32 AI 开发台** panel (MCP Apps surface) exposes the same loop with three tabs: chip library (with "bring selection into the conversation"), build pipeline (env / set-target / build / flash with live logs), and serial monitor. Build and flash results also render an inline progress card in the conversation.
+The **ESP32 AI 开发台** panel (MCP Apps surface) exposes the same loop with three tabs: chip library (with "bring selection into the conversation"), build pipeline (env / set-target / build / flash with live logs), and serial monitor with a custom command sidebar and a terminal-style send bar. Build and flash results also render an inline progress card in the conversation.
 
 Slash commands: `/esp32:new-project`, `/esp32:build`, `/esp32:flash`, `/esp32:monitor`. Skills: `esp32-s3-overview` (chip Q&A), `esp32-s3-workflow` (full-loop methodology).
 

@@ -16,9 +16,10 @@ English documentation: [README.md](README.md)。
 | `esp32_build` / `esp32_flash` / `esp32_size` | 编译/烧录/大小分析（后台作业：jobId + 日志游标工具）。烧录**覆写设备 flash**。 |
 | `esp32_job_status` / `esp32_job_logs` / `esp32_job_cancel` | 作业管理，日志按字节游标增量读取。 |
 | `esp32_monitor_start/read/send/stop` | 串口监视（IDF python 环境的 pyserial 助手），同串口同时仅一个监视作业。 |
+| `esp32_uart_commands_get/set` | 面板自定义 UART 命令按钮（持久化到插件数据目录，最多 100 条）。 |
 | sdkconfig | `esp32_sdkconfig_get/set` 读 `sdkconfig.json`、写 `sdkconfig.defaults`（并补丁活动的 `sdkconfig`）。 |
 
-**ESP32 AI 开发台**面板（MCP Apps surface）以三个 tab 承载同一回路：芯片库（可"把选型信息带入对话"）、构建管线（环境/set-target/编译/烧录 + 实时日志）、串口监视。编译和烧录的工具结果还会在对话里渲染内联进度卡。
+**ESP32 AI 开发台**面板（MCP Apps surface）以三个 tab 承载同一回路：芯片库（可"把选型信息带入对话"）、构建管线（环境/set-target/编译/烧录 + 实时日志）、串口监视（右侧自定义命令栏 + 底部终端式发送条）。编译和烧录的工具结果还会在对话里渲染内联进度卡。
 
 斜杠命令：`/esp32:new-project`、`/esp32:build`、`/esp32:flash`、`/esp32:monitor`。技能：`esp32-s3-overview`（芯片问答）、`esp32-s3-workflow`（全流程方法论）。
 

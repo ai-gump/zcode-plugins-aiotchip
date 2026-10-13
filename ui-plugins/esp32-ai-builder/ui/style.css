@@ -54,3 +54,41 @@ pre {
   background: var(--fg); color: var(--bg); border-radius: 8px; padding: 7px 14px;
   font-size: 12px; max-width: 90%; text-align: center;
 }
+
+/* 串口监视：日志主区 + 右侧 UART 命令栏 + 底部发送条 */
+.monitor-layout { display: flex; gap: 8px; align-items: stretch; margin-top: 6px; }
+#monitor-log { flex: 1 1 auto; min-width: 0; height: 46vh; max-height: 560px; margin: 0; }
+#cmd-panel {
+  flex: 0 0 184px; display: flex; flex-direction: column; min-height: 0;
+  border: 1px solid var(--line); border-radius: 8px; background: var(--card); overflow: hidden;
+}
+.cmd-head {
+  display: flex; justify-content: space-between; align-items: center;
+  padding: 6px 8px; font-weight: 600; font-size: 12px; color: var(--muted);
+  border-bottom: 1px solid var(--line);
+}
+#cmd-add { padding: 0 8px; line-height: 1.4; }
+#cmd-list { overflow-y: auto; flex: 1; padding: 4px; }
+.cmd-empty { padding: 6px; }
+.cmd-group { color: var(--muted); font-size: 11px; padding: 6px 4px 2px; }
+.cmd-item { display: flex; align-items: center; gap: 4px; margin: 1px 0; }
+.cmd-btn {
+  flex: 1; min-width: 0; display: flex; align-items: center; gap: 6px; text-align: left;
+  background: none; border: none; color: var(--fg); padding: 4px 6px;
+  border-radius: 6px; cursor: pointer; font: inherit;
+}
+.cmd-btn:hover { background: var(--line); }
+.cmd-btn span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.cmd-dot { width: 8px; height: 8px; border-radius: 50%; background: #2ea043; flex: 0 0 auto; }
+.cmd-del { border: none; background: none; color: var(--muted); cursor: pointer; padding: 2px 4px; visibility: hidden; flex: 0 0 auto; }
+.cmd-item:hover .cmd-del { visibility: visible; }
+.cmd-del:hover { color: #f85149; }
+#cmd-form { display: flex; flex-direction: column; gap: 5px; padding: 8px 6px; border-top: 1px solid var(--line); }
+#cmd-form[hidden] { display: none; }
+#cmd-form input { width: 100%; font-size: 12px; }
+.cmd-nl { font-size: 11px; color: var(--muted); display: flex; gap: 4px; align-items: center; }
+.cmd-form-btns { display: flex; gap: 4px; }
+.cmd-form-btns button { flex: 1; padding: 4px 6px; font-size: 12px; }
+.send-bar { display: flex; gap: 6px; margin-top: 8px; align-items: center; }
+.send-bar input:not([type="checkbox"]) { flex: 1; min-width: 0; }
+.send-bar .nl { display: flex; align-items: center; gap: 3px; color: var(--muted); font-size: 11px; flex: 0 0 auto; }

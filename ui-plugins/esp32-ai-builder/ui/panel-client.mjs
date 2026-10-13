@@ -2,7 +2,7 @@
 import { App } from "@modelcontextprotocol/ext-apps";
 
 const app = new App(
-  { name: "esp32-ai-builder-panel", version: "0.2.0" },
+  { name: "esp32-ai-builder-panel", version: "0.3.0" },
   { availableDisplayModes: ["inline", "fullscreen"] },
 );
 
@@ -167,6 +167,105 @@ async function pollJob() {
 
 /* ---------- 串口监视 ---------- */
 
+let uartCommands = [];
+
+async function loadCommands() {
+  try {
+    const data = await call("esp32_uart_commands_get", {});
+    uartCommands = Array.isArray(data.commands) ? data.commands : [];
+  } catch {
+    uartCommands = [];
+  }
+  renderCommands();
+}
+
+function renderCommands() {
+  const list = $("cmd-list");
+  if (!uartCommands.length) {
+    list.innerHTML = '<div class="muted cmd-empty">暂无命令，点右上角 ＋ 添加</div>';
+    return;
+  }
+  const groups = new Map();
+  uartCommands.forEach((c, index) => {
+    const g = c.group || "命令";
+    if (!groups.has(g)) groups.set(g, []);
+    groups.get(g).push({ ...c, index });
+  });
+  list.innerHTML = "";
+  for (const [group, items] of groups) {
+    const head = document.createElement("div");
+    head.className = "cmd-group";
+    head.textContent = group;
+    list.appendChild(head);
+    for (const item of items) {
+      const row = document.createElement("div");
+      row.className = "cmd-item";
+      const btn = document.createElement("button");
+      btn.className = "cmd-btn";
+      btn.title = `${item.text}${item.newline !== false ? "\\n" : ""}`;
+      const dot = document.createElement("span");
+      dot.className = "cmd-dot";
+      const label = document.createElement("span");
+      label.textContent = item.label;
+      btn.append(dot, label);
+      btn.onclick = () => sendCommand(item);
+      const del = document.createElement("button");
+      del.className = "cmd-del";
+      del.title = "删除";
+      del.textContent = "✕";
+      del.onclick = () =>
+        guard(async () => {
+          uartCommands.splice(item.index, 1);
+          await call("esp32_uart_commands_set", { commands: uartCommands });
+          renderCommands();
+        });
+      row.append(btn, del);
+      list.appendChild(row);
+    }
+  }
+}
+
+function sendCommand(item) {
+  if (!monitorJob) {
+    toast("先开始监视，再发送命令");
+    return;
+  }
+  guard(async () => {
+    await call("esp32_monitor_send", {
+      jobId: monitorJob,
+      text: item.text,
+      newline: item.newline !== false,
+    });
+    toast(`已发送 ${item.label}`);
+  });
+}
+
+$("cmd-add").onclick = () => {
+  $("cmd-label").value = "";
+  $("cmd-text").value = "";
+  $("cmd-group").value = "";
+  $("cmd-newline").checked = true;
+  $("cmd-form").hidden = false;
+  $("cmd-label").focus();
+};
+$("cmd-cancel").onclick = () => ($("cmd-form").hidden = true);
+$("cmd-save").onclick = () =>
+  guard(async () => {
+    const label = $("cmd-label").value.trim();
+    const text = $("cmd-text").value;
+    if (!label || !text) throw new Error("名称和发送内容都不能为空");
+    if (uartCommands.length >= 100) throw new Error("最多 100 条命令");
+    uartCommands.push({
+      label,
+      text,
+      newline: $("cmd-newline").checked,
+      ...($("cmd-group").value.trim() ? { group: $("cmd-group").value.trim() } : {}),
+    });
+    await call("esp32_uart_commands_set", { commands: uartCommands });
+    $("cmd-form").hidden = true;
+    renderCommands();
+  });
+
 $("btn-monitor-start").onclick = () =>
   guard(async () => {
     const port = $("monitor-port").value;
@@ -193,14 +292,22 @@ $("btn-monitor-stop").onclick = () =>
     $("btn-monitor-stop").disabled = true;
   });
 
-$("btn-monitor-send").onclick = () =>
+function sendFromInput() {
+  const text = $("monitor-input").value;
+  if (!monitorJob || !text) return;
   guard(async () => {
-    const text = $("monitor-input").value;
-    if (!monitorJob || !text) return;
-    await call("esp32_monitor_send", { jobId: monitorJob, text });
+    await call("esp32_monitor_send", {
+      jobId: monitorJob,
+      text,
+      newline: $("send-newline").checked,
+    });
     $("monitor-input").value = "";
-    toast("已发送");
   });
+}
+$("btn-monitor-send").onclick = sendFromInput;
+$("monitor-input").onkeydown = (event) => {
+  if (event.key === "Enter") sendFromInput();
+};
 
 async function pollMonitor() {
   if (!monitorJob) return;
@@ -255,6 +362,7 @@ async function main() {
   await app.connect();
   applyTheme();
   loadChip();
+  loadCommands();
   startPolling();
 }
 main();

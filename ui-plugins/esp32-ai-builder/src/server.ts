@@ -42,7 +42,7 @@ import {
 } from "./idf";
 import { listSerialPorts } from "./serial";
 
-const PLUGIN_VERSION = "0.2.0";
+const PLUGIN_VERSION = "0.3.0";
 const HTML_MIME = "text/html;profile=mcp-app";
 const DIST_DIR = dirname(fileURLToPath(import.meta.url));
 
@@ -772,6 +772,86 @@ server.registerTool(
     return {
       content: [{ type: "text", text: `监视作业 ${jobId} 已停止，串口 ${port ?? "?"} 已释放。` }],
       structuredContent: { job: meta },
+    };
+  },
+);
+
+/* ------------------------- UART 命令（面板自定义，仅页面） ------------------------- */
+
+interface UartCommand {
+  label: string;
+  text: string;
+  newline: boolean;
+  group?: string;
+}
+
+const UART_COMMANDS_DEFAULT: UartCommand[] = [
+  { label: "version", text: "version", newline: true, group: "常用" },
+  { label: "status", text: "status", newline: true, group: "常用" },
+  { label: "reboot", text: "reboot", newline: true, group: "常用" },
+];
+
+function uartCommandsFile(): string {
+  return join(dataDir, "uart-commands.json");
+}
+
+const UartCommandSchema = z.object({
+  label: z.string().min(1).max(64).describe("按钮显示名"),
+  text: z.string().min(1).max(512).describe("发送到串口的文本"),
+  newline: z.boolean().optional().describe("末尾追加换行（默认 true）"),
+  group: z.string().max(32).optional().describe("分组名（可选，默认归入“命令”）"),
+});
+
+server.registerTool(
+  "esp32_uart_commands_get",
+  {
+    title: "List custom UART commands",
+    description:
+      "List the panel's custom UART command buttons (persisted in the plugin data directory). " +
+      "Returns the built-in defaults when nothing has been customized.",
+    inputSchema: {},
+    _meta: { ui: { visibility: ["app"] } },
+  },
+  async () => {
+    let commands = UART_COMMANDS_DEFAULT;
+    if (existsSync(uartCommandsFile())) {
+      try {
+        const parsed = JSON.parse(await readFile(uartCommandsFile(), "utf8")) as UartCommand[];
+        if (Array.isArray(parsed) && parsed.length > 0) commands = parsed;
+      } catch {
+        // 损坏文件回退默认值
+      }
+    }
+    return {
+      content: [{ type: "text", text: `${commands.length} 条自定义 UART 命令。` }],
+      structuredContent: { commands },
+    };
+  },
+);
+
+server.registerTool(
+  "esp32_uart_commands_set",
+  {
+    title: "Save custom UART commands",
+    description:
+      "Replace the panel's custom UART command buttons (persisted in the plugin data directory, " +
+      "so they survive sessions and restarts). Pass the full list; 100 entries max.",
+    inputSchema: {
+      commands: z.array(UartCommandSchema).max(100).describe("Full command list"),
+    },
+    _meta: { ui: { visibility: ["app"] } },
+  },
+  async ({ commands }) => {
+    const normalized = commands.map((c) => ({
+      label: c.label,
+      text: c.text,
+      newline: c.newline ?? true,
+      ...(c.group ? { group: c.group } : {}),
+    }));
+    await writeFileText(uartCommandsFile(), JSON.stringify(normalized, null, 2) + "\n");
+    return {
+      content: [{ type: "text", text: `已保存 ${normalized.length} 条自定义 UART 命令。` }],
+      structuredContent: { commands: normalized },
     };
   },
 );

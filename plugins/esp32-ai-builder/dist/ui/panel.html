@@ -62,6 +62,44 @@ pre {
   font-size: 12px; max-width: 90%; text-align: center;
 }
 
+/* 串口监视：日志主区 + 右侧 UART 命令栏 + 底部发送条 */
+.monitor-layout { display: flex; gap: 8px; align-items: stretch; margin-top: 6px; }
+#monitor-log { flex: 1 1 auto; min-width: 0; height: 46vh; max-height: 560px; margin: 0; }
+#cmd-panel {
+  flex: 0 0 184px; display: flex; flex-direction: column; min-height: 0;
+  border: 1px solid var(--line); border-radius: 8px; background: var(--card); overflow: hidden;
+}
+.cmd-head {
+  display: flex; justify-content: space-between; align-items: center;
+  padding: 6px 8px; font-weight: 600; font-size: 12px; color: var(--muted);
+  border-bottom: 1px solid var(--line);
+}
+#cmd-add { padding: 0 8px; line-height: 1.4; }
+#cmd-list { overflow-y: auto; flex: 1; padding: 4px; }
+.cmd-empty { padding: 6px; }
+.cmd-group { color: var(--muted); font-size: 11px; padding: 6px 4px 2px; }
+.cmd-item { display: flex; align-items: center; gap: 4px; margin: 1px 0; }
+.cmd-btn {
+  flex: 1; min-width: 0; display: flex; align-items: center; gap: 6px; text-align: left;
+  background: none; border: none; color: var(--fg); padding: 4px 6px;
+  border-radius: 6px; cursor: pointer; font: inherit;
+}
+.cmd-btn:hover { background: var(--line); }
+.cmd-btn span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.cmd-dot { width: 8px; height: 8px; border-radius: 50%; background: #2ea043; flex: 0 0 auto; }
+.cmd-del { border: none; background: none; color: var(--muted); cursor: pointer; padding: 2px 4px; visibility: hidden; flex: 0 0 auto; }
+.cmd-item:hover .cmd-del { visibility: visible; }
+.cmd-del:hover { color: #f85149; }
+#cmd-form { display: flex; flex-direction: column; gap: 5px; padding: 8px 6px; border-top: 1px solid var(--line); }
+#cmd-form[hidden] { display: none; }
+#cmd-form input { width: 100%; font-size: 12px; }
+.cmd-nl { font-size: 11px; color: var(--muted); display: flex; gap: 4px; align-items: center; }
+.cmd-form-btns { display: flex; gap: 4px; }
+.cmd-form-btns button { flex: 1; padding: 4px 6px; font-size: 12px; }
+.send-bar { display: flex; gap: 6px; margin-top: 8px; align-items: center; }
+.send-bar input:not([type="checkbox"]) { flex: 1; min-width: 0; }
+.send-bar .nl { display: flex; align-items: center; gap: 3px; color: var(--muted); font-size: 11px; flex: 0 0 auto; }
+
     </style>
   </head>
   <body data-theme="light">
@@ -113,10 +151,30 @@ pre {
           <button id="btn-monitor-stop" disabled>停止</button>
         </div>
         <div id="monitor-status" class="muted">未连接</div>
-        <pre id="monitor-log"></pre>
-        <div class="row buttons">
-          <input id="monitor-input" placeholder="发送到设备…" />
-          <button id="btn-monitor-send">发送</button>
+        <div class="monitor-layout">
+          <pre id="monitor-log"></pre>
+          <aside id="cmd-panel">
+            <div class="cmd-head">
+              <span>UART 命令</span>
+              <button id="cmd-add" title="添加命令">＋</button>
+            </div>
+            <div id="cmd-list"><div class="muted cmd-empty">加载中…</div></div>
+            <div id="cmd-form" hidden>
+              <input id="cmd-label" placeholder="名称（如 reboot）" />
+              <input id="cmd-text" placeholder="发送内容" />
+              <input id="cmd-group" placeholder="分组（可选）" />
+              <label class="cmd-nl"><input type="checkbox" id="cmd-newline" checked /> 末尾换行</label>
+              <div class="cmd-form-btns">
+                <button id="cmd-save" class="primary">保存</button>
+                <button id="cmd-cancel">取消</button>
+              </div>
+            </div>
+          </aside>
+        </div>
+        <div class="send-bar">
+          <input id="monitor-input" placeholder="发送到设备…（回车发送）" />
+          <label class="nl" title="末尾追加换行"><input type="checkbox" id="send-newline" checked /> \n</label>
+          <button id="btn-monitor-send" class="primary">发送</button>
         </div>
       </section>
     </main>
@@ -26728,7 +26786,7 @@ container holding the app. Specify either width or maxWidth, and either height o
 
   // ui/panel-client.mjs
   var app = new l(
-    { name: "esp32-ai-builder-panel", version: "0.2.0" },
+    { name: "esp32-ai-builder-panel", version: "0.3.0" },
     { availableDisplayModes: ["inline", "fullscreen"] }
   );
   var $ = (id) => document.getElementById(id);
@@ -26869,6 +26927,98 @@ container holding the app. Specify either width or maxWidth, and either height o
       job = null;
     }
   }
+  var uartCommands = [];
+  async function loadCommands() {
+    try {
+      const data = await call("esp32_uart_commands_get", {});
+      uartCommands = Array.isArray(data.commands) ? data.commands : [];
+    } catch {
+      uartCommands = [];
+    }
+    renderCommands();
+  }
+  function renderCommands() {
+    const list = $("cmd-list");
+    if (!uartCommands.length) {
+      list.innerHTML = '<div class="muted cmd-empty">\u6682\u65E0\u547D\u4EE4\uFF0C\u70B9\u53F3\u4E0A\u89D2 \uFF0B \u6DFB\u52A0</div>';
+      return;
+    }
+    const groups = /* @__PURE__ */ new Map();
+    uartCommands.forEach((c2, index) => {
+      const g = c2.group || "\u547D\u4EE4";
+      if (!groups.has(g)) groups.set(g, []);
+      groups.get(g).push({ ...c2, index });
+    });
+    list.innerHTML = "";
+    for (const [group, items] of groups) {
+      const head = document.createElement("div");
+      head.className = "cmd-group";
+      head.textContent = group;
+      list.appendChild(head);
+      for (const item of items) {
+        const row = document.createElement("div");
+        row.className = "cmd-item";
+        const btn = document.createElement("button");
+        btn.className = "cmd-btn";
+        btn.title = `${item.text}${item.newline !== false ? "\\n" : ""}`;
+        const dot = document.createElement("span");
+        dot.className = "cmd-dot";
+        const label = document.createElement("span");
+        label.textContent = item.label;
+        btn.append(dot, label);
+        btn.onclick = () => sendCommand(item);
+        const del = document.createElement("button");
+        del.className = "cmd-del";
+        del.title = "\u5220\u9664";
+        del.textContent = "\u2715";
+        del.onclick = () => guard(async () => {
+          uartCommands.splice(item.index, 1);
+          await call("esp32_uart_commands_set", { commands: uartCommands });
+          renderCommands();
+        });
+        row.append(btn, del);
+        list.appendChild(row);
+      }
+    }
+  }
+  function sendCommand(item) {
+    if (!monitorJob) {
+      toast("\u5148\u5F00\u59CB\u76D1\u89C6\uFF0C\u518D\u53D1\u9001\u547D\u4EE4");
+      return;
+    }
+    guard(async () => {
+      await call("esp32_monitor_send", {
+        jobId: monitorJob,
+        text: item.text,
+        newline: item.newline !== false
+      });
+      toast(`\u5DF2\u53D1\u9001 ${item.label}`);
+    });
+  }
+  $("cmd-add").onclick = () => {
+    $("cmd-label").value = "";
+    $("cmd-text").value = "";
+    $("cmd-group").value = "";
+    $("cmd-newline").checked = true;
+    $("cmd-form").hidden = false;
+    $("cmd-label").focus();
+  };
+  $("cmd-cancel").onclick = () => $("cmd-form").hidden = true;
+  $("cmd-save").onclick = () => guard(async () => {
+    const label = $("cmd-label").value.trim();
+    const text = $("cmd-text").value;
+    if (!label || !text) throw new Error("\u540D\u79F0\u548C\u53D1\u9001\u5185\u5BB9\u90FD\u4E0D\u80FD\u4E3A\u7A7A");
+    if (uartCommands.length >= 100) throw new Error("\u6700\u591A 100 \u6761\u547D\u4EE4");
+    uartCommands.push({
+      label,
+      text,
+      newline: $("cmd-newline").checked,
+      ...$("cmd-group").value.trim() ? { group: $("cmd-group").value.trim() } : {}
+    });
+    await call("esp32_uart_commands_set", { commands: uartCommands });
+    $("cmd-form").hidden = true;
+    renderCommands();
+  });
   $("btn-monitor-start").onclick = () => guard(async () => {
     const port = $("monitor-port").value;
     if (!port || port.startsWith("\uFF08")) throw new Error("\u672A\u68C0\u6D4B\u5230\u4E32\u53E3\u8BBE\u5907");
@@ -26891,13 +27041,22 @@ container holding the app. Specify either width or maxWidth, and either height o
     $("btn-monitor-start").disabled = false;
     $("btn-monitor-stop").disabled = true;
   });
-  $("btn-monitor-send").onclick = () => guard(async () => {
+  function sendFromInput() {
     const text = $("monitor-input").value;
     if (!monitorJob || !text) return;
-    await call("esp32_monitor_send", { jobId: monitorJob, text });
-    $("monitor-input").value = "";
-    toast("\u5DF2\u53D1\u9001");
-  });
+    guard(async () => {
+      await call("esp32_monitor_send", {
+        jobId: monitorJob,
+        text,
+        newline: $("send-newline").checked
+      });
+      $("monitor-input").value = "";
+    });
+  }
+  $("btn-monitor-send").onclick = sendFromInput;
+  $("monitor-input").onkeydown = (event) => {
+    if (event.key === "Enter") sendFromInput();
+  };
   async function pollMonitor() {
     if (!monitorJob) return;
     try {
@@ -26944,6 +27103,7 @@ container holding the app. Specify either width or maxWidth, and either height o
     await app.connect();
     applyTheme();
     loadChip();
+    loadCommands();
     startPolling();
   }
   main();
