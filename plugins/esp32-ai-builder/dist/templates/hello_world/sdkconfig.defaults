@@ -1,0 +1,2 @@
+# esp32-ai-builder 默认配置：按开发板修改 LED 引脚。
+CONFIG_BLINK_GPIO=2

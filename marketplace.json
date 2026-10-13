@@ -1,0 +1,41 @@
+{
+  "name": "zcode-plugins-aiotchip",
+  "description": "AIoT chip development plugins for ZCode, starting with end-to-end ESP32-S3 development.",
+  "description_i18n": {
+    "en": "AIoT chip development plugins for ZCode, starting with end-to-end ESP32-S3 development.",
+    "zh-CN": "面向 ZCode 的 AIoT 芯片开发插件市场，首发端到端 ESP32-S3 开发插件。"
+  },
+  "owner": {
+    "name": "ai-gump",
+    "url": "https://github.com/ai-gump"
+  },
+  "plugins": [
+    {
+      "name": "esp32-ai-builder",
+      "displayName": "ESP32 AI Builder",
+      "displayName_i18n": {
+        "en": "ESP32 AI Builder",
+        "zh-CN": "ESP32 AI 开发台"
+      },
+      "version": "0.2.1",
+      "source": "./plugins/esp32-ai-builder",
+      "description": "End-to-end ESP32-S3 development for ZCode: chip catalog, ESP-IDF 5.5 environment setup, project creation, build, flash, and serial monitor; debug on the roadmap.",
+      "description_i18n": {
+        "en": "End-to-end ESP32-S3 development for ZCode: chip catalog, ESP-IDF 5.5 environment setup, project creation, build, flash, and serial monitor; debug on the roadmap.",
+        "zh-CN": "面向 ZCode 的 ESP32-S3 端到端开发：芯片资料、ESP-IDF 5.5 环境搭建、项目创建、编译、烧录与串口监视；调试暂未接入。"
+      },
+      "author": {
+        "name": "ai-gump"
+      },
+      "category": "developer-tools",
+      "keywords": [
+        "esp32",
+        "esp32-s3",
+        "esp-idf",
+        "embedded",
+        "iot",
+        "firmware"
+      ]
+    }
+  ]
+}

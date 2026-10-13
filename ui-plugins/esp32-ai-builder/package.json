@@ -1,0 +1,22 @@
+{
+  "name": "@zcode/plugin-esp32-ai-builder",
+  "version": "0.2.1",
+  "private": true,
+  "description": "ESP32-S3 端到端开发插件：芯片资料、ESP-IDF v5.5 环境搭建、项目创建、编译、烧录与串口监视（调试暂未接入）。",
+  "license": "MIT",
+  "type": "module",
+  "scripts": {
+    "build": "node scripts/build.mjs",
+    "check": "node --check dist/server.mjs",
+    "typecheck": "tsc -p tsconfig.json --noEmit"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "1.29.0",
+    "zod": "^4.4.3"
+  },
+  "devDependencies": {
+    "@types/node": "25.5.0",
+    "esbuild": "^0.25.0",
+    "typescript": "6.0.2"
+  }
+}

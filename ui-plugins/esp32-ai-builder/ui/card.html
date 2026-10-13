@@ -1,0 +1,29 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>ESP32 作业</title>
+    <style>
+      :root { color-scheme: light dark; }
+      body { margin: 0; font: 12px/1.5 -apple-system, "PingFang SC", "Segoe UI", sans-serif; padding: 8px 10px; }
+      body[data-theme="dark"] { background: #16181d; color: #e8eaed; --line: #34383f; --muted: #9aa0a6; }
+      body:not([data-theme="dark"]) { background: #fff; color: #1f2328; --line: #d8dee4; --muted: #6a737d; }
+      .head { display: flex; gap: 8px; align-items: center; }
+      .badge { border: 1px solid var(--line); border-radius: 999px; padding: 1px 10px; font-weight: 600; }
+      .muted { color: var(--muted); }
+      pre { margin: 6px 0 0; padding: 6px 8px; border: 1px solid var(--line); border-radius: 6px;
+            max-height: 180px; overflow: auto; font: 11px/1.4 ui-monospace, Menlo, monospace;
+            white-space: pre-wrap; word-break: break-all; }
+    </style>
+  </head>
+  <body data-theme="light">
+    <div class="head">
+      <span id="kind" class="muted">作业</span>
+      <span id="status" class="badge">初始化</span>
+      <span id="job-id" class="muted"></span>
+    </div>
+    <pre id="log">等待工具结果…</pre>
+    <script>/*__CARD_CLIENT__*/</script>
+  </body>
+</html>

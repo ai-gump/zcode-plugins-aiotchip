@@ -1,0 +1,67 @@
+{
+  "name": "esp32-ai-builder",
+  "version": "0.2.1",
+  "description": "End-to-end ESP32-S3 development for ZCode: chip catalog, ESP-IDF 5.5 environment setup, project creation, build, flash, and serial monitor; debug on the roadmap.",
+  "description_i18n": {
+    "en": "End-to-end ESP32-S3 development for ZCode: chip catalog, ESP-IDF 5.5 environment setup, project creation, build, flash, and serial monitor; debug on the roadmap.",
+    "zh-CN": "面向 ZCode 的 ESP32-S3 端到端开发：芯片资料、ESP-IDF 5.5 环境搭建、项目创建、编译、烧录与串口监视；调试暂未接入。"
+  },
+  "author": {
+    "name": "Z.ai",
+    "url": "https://z.ai"
+  },
+  "license": "MIT",
+  "keywords": [
+    "esp32",
+    "esp32-s3",
+    "esp-idf",
+    "embedded",
+    "iot",
+    "firmware"
+  ],
+  "mcpServers": {
+    "esp32": {
+      "type": "stdio",
+      "command": "node",
+      "args": [
+        "${ZCODE_PLUGIN_ROOT}/dist/server.mjs"
+      ],
+      "cwd": "${ZCODE_PROJECT_DIR}",
+      "env": {
+        "ZCODE_PLUGIN_DATA": "${ZCODE_PLUGIN_DATA}",
+        "ZCODE_WORKSPACE_ROOT": "${ZCODE_PROJECT_DIR}",
+        "ESP32_IDF_PATH": "${user_config.idf_path}",
+        "ESP32_IDF_TOOLS_PATH": "${user_config.idf_tools_path}"
+      }
+    }
+  },
+  "ui": {
+    "surfaces": [
+      {
+        "id": "esp32",
+        "title": {
+          "zh-CN": "ESP32 AI 开发台",
+          "en": "ESP32 AI Builder"
+        },
+        "icon": "cpu",
+        "server": "esp32",
+        "resourceUri": "ui://esp32-ai-builder/panel.html",
+        "availability": "session"
+      }
+    ]
+  },
+  "userConfig": {
+    "idf_path": {
+      "title": "ESP-IDF 路径",
+      "type": "directory",
+      "default": "",
+      "description": "已有 ESP-IDF 5.5 安装目录（含 export.sh）；留空则自动探测，或用 esp32_idf_install 受控安装"
+    },
+    "idf_tools_path": {
+      "title": "IDF 工具链目录",
+      "type": "directory",
+      "default": "",
+      "description": "自定义 IDF_TOOLS_PATH；留空使用 ~/.espressif（受控安装在插件数据目录内）"
+    }
+  }
+}

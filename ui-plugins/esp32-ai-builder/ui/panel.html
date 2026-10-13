@@ -1,0 +1,71 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>ESP32 AI 开发台</title>
+    <style>
+      /*__PANEL_STYLES__*/
+    </style>
+  </head>
+  <body data-theme="light">
+    <header class="tabs" role="tablist">
+      <button class="tab active" data-tab="chip" role="tab">芯片库</button>
+      <button class="tab" data-tab="pipeline" role="tab">构建管线</button>
+      <button class="tab" data-tab="monitor" role="tab">串口监视</button>
+    </header>
+
+    <main>
+      <!-- 芯片库 -->
+      <section id="tab-chip" class="page active">
+        <div id="chip-loading" class="muted">加载芯片资料…</div>
+        <div id="chip-body" hidden>
+          <h2 id="chip-name"></h2>
+          <p id="chip-summary" class="muted"></p>
+          <table class="spec" id="chip-spec"></table>
+          <h3>亮点</h3>
+          <ul id="chip-highlights"></ul>
+          <h3>文档</h3>
+          <ul id="chip-docs"></ul>
+          <button id="chip-context" class="primary">把选型信息带入对话</button>
+        </div>
+      </section>
+
+      <!-- 构建管线 -->
+      <section id="tab-pipeline" class="page" hidden>
+        <div id="env-line" class="muted">检查环境中…</div>
+        <label class="row">项目目录（工作区相对名或绝对路径）
+          <input id="project" placeholder="hello_world" />
+        </label>
+        <div class="row buttons">
+          <button id="btn-settarget">set-target</button>
+          <button id="btn-build" class="primary">编译</button>
+          <button id="btn-flash" class="primary">烧录</button>
+          <select id="port"></select>
+          <button id="btn-refresh-env">刷新环境</button>
+        </div>
+        <div id="job-head" class="muted" hidden></div>
+        <pre id="job-log" hidden></pre>
+      </section>
+
+      <!-- 串口监视 -->
+      <section id="tab-monitor" class="page" hidden>
+        <div class="row buttons">
+          <select id="monitor-port"></select>
+          <input id="monitor-baud" value="115200" class="baud" inputmode="numeric" />
+          <button id="btn-monitor-start" class="primary">开始监视</button>
+          <button id="btn-monitor-stop" disabled>停止</button>
+        </div>
+        <div id="monitor-status" class="muted">未连接</div>
+        <pre id="monitor-log"></pre>
+        <div class="row buttons">
+          <input id="monitor-input" placeholder="发送到设备…" />
+          <button id="btn-monitor-send">发送</button>
+        </div>
+      </section>
+    </main>
+
+    <div id="toast" hidden></div>
+    <script>/*__PANEL_CLIENT__*/</script>
+  </body>
+</html>

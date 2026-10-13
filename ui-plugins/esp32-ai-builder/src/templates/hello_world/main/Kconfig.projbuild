@@ -1,0 +1,12 @@
+menu "ESP32 AI Builder Example Configuration"
+
+    config BLINK_GPIO
+        int "Blink GPIO number"
+        range 0 48
+        default 2
+        help
+            GPIO number (IOxx) toggled by the hello_world example.
+            ESP32-S3-DevKitC-1 with an addressable RGB LED usually uses IO48 or IO38;
+            simple on/off LEDs are wired per-board (2 is a common choice).
+
+endmenu
