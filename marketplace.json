@@ -17,7 +17,7 @@
         "en": "ESP32 AI Builder",
         "zh-CN": "ESP32 AI 开发台"
       },
-      "version": "0.6.0",
+      "version": "0.6.1",
       "source": "./plugins/esp32-ai-builder",
       "description": "End-to-end ESP32-S3 development for ZCode: chip catalog, ESP-IDF 5.5 environment setup, project creation, build, flash, and serial monitor; debug on the roadmap.",
       "description_i18n": {

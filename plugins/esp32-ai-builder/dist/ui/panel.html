@@ -27022,7 +27022,7 @@ container holding the app. Specify either width or maxWidth, and either height o
           }
         ]
       });
-      toast("\u5DF2\u6DFB\u52A0\u5230\u8F93\u5165\u533A\u4E0A\u4E0B\u6587\uFF0C\u53EF\u7EE7\u7EED\u63D0\u95EE");
+      toast(`\u5DF2\u6DFB\u52A0\u5230\u8F93\u5165\u533A\u4E0A\u4E0B\u6587\uFF08\u9762\u677F v0.6.1\uFF09`);
     } catch (error62) {
       toast(`\u5F53\u524D\u5BBF\u4E3B\u4E0D\u652F\u6301\uFF1A${error62.message}`);
     }
@@ -27531,6 +27531,7 @@ container holding the app. Specify either width or maxWidth, and either height o
 \u2026\uFF08\u5DF2\u622A\u65AD\uFF09` : selText;
     selMenu.hidden = true;
     window.getSelection()?.removeAllRanges();
+    const V2 = "0.6.1";
     if (act === "task") {
       guard(async () => {
         await app.updateModelContext({
@@ -27539,7 +27540,7 @@ container holding the app. Specify either width or maxWidth, and either height o
 ${truncated}` }
           ]
         });
-        toast("\u5DF2\u6DFB\u52A0\u5230\u8F93\u5165\u533A\u4E0A\u4E0B\u6587\uFF0C\u53EF\u7EE7\u7EED\u63D0\u95EE");
+        toast(`\u5DF2\u6DFB\u52A0\u5230\u8F93\u5165\u533A\u4E0A\u4E0B\u6587\uFF08\u9762\u677F v${V2}\uFF09`);
       });
     } else {
       guard(async () => {
@@ -27549,7 +27550,7 @@ ${truncated}` }
 
 ${truncated}` }]
         });
-        toast("\u5DF2\u53D1\u9001\u5230\u5BF9\u8BDD");
+        toast(`\u5DF2\u53D1\u9001\u5230\u5BF9\u8BDD\uFF08\u9762\u677F v${V2}\uFF09`);
       });
     }
   });

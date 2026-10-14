@@ -92,7 +92,7 @@ $("chip-context").onclick = async () => {
         },
       ],
     });
-    toast("已添加到输入区上下文，可继续提问");
+    toast(`已添加到输入区上下文（面板 v0.6.1）`);
   } catch (error) {
     toast(`当前宿主不支持：${error.message}`);
   }
@@ -684,6 +684,7 @@ selMenu.addEventListener("click", (event) => {
   const truncated = selText.length > 4000 ? `${selText.slice(0, 4000)}\n…（已截断）` : selText;
   selMenu.hidden = true;
   window.getSelection()?.removeAllRanges();
+  const V = "0.6.1";
   if (act === "task") {
     guard(async () => {
       await app.updateModelContext({
@@ -691,7 +692,7 @@ selMenu.addEventListener("click", (event) => {
           { type: "text", text: `【串口日志选段（用户在面板中选中）】\n${truncated}` },
         ],
       });
-      toast("已添加到输入区上下文，可继续提问");
+      toast(`已添加到输入区上下文（面板 v${V}）`);
     });
   } else {
     guard(async () => {
@@ -699,7 +700,7 @@ selMenu.addEventListener("click", (event) => {
         role: "user",
         content: [{ type: "text", text: `请帮我分析这段串口日志输出：\n\n${truncated}` }],
       });
-      toast("已发送到对话");
+      toast(`已发送到对话（面板 v${V}）`);
     });
   }
 });

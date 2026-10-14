@@ -1,6 +1,6 @@
 {
   "name": "@zcode/plugin-esp32-ai-builder",
-  "version": "0.6.0",
+  "version": "0.6.1",
   "private": true,
   "description": "ESP32-S3 端到端开发插件：芯片资料、ESP-IDF v5.5 环境搭建、项目创建、编译、烧录与串口监视（调试暂未接入）。",
   "license": "MIT",

@@ -36390,7 +36390,7 @@ async function listSerialPorts() {
 }
 
 // src/server.ts
-var PLUGIN_VERSION = "0.6.0";
+var PLUGIN_VERSION = "0.6.1";
 var HTML_MIME = "text/html;profile=mcp-app";
 var DIST_DIR = dirname(fileURLToPath(import.meta.url));
 var dataDir = process.env.ZCODE_PLUGIN_DATA?.trim() || join4(DIST_DIR, "data");
