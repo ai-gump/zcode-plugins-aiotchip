@@ -6,7 +6,13 @@ var __getOwnPropDesc = Object.getOwnPropertyDescriptor;
 var __getOwnPropNames = Object.getOwnPropertyNames;
 var __getProtoOf = Object.getPrototypeOf;
 var __hasOwnProp = Object.prototype.hasOwnProperty;
-var __commonJS = (cb, mod) => function __require() {
+var __require = /* @__PURE__ */ ((x) => typeof require !== "undefined" ? require : typeof Proxy !== "undefined" ? new Proxy(x, {
+  get: (a, b) => (typeof require !== "undefined" ? require : a)[b]
+}) : x)(function(x) {
+  if (typeof require !== "undefined") return require.apply(this, arguments);
+  throw Error('Dynamic require of "' + x + '" is not supported');
+});
+var __commonJS = (cb, mod) => function __require2() {
   return mod || (0, cb[__getOwnPropNames(cb)[0]])((mod = { exports: {} }).exports, mod), mod.exports;
 };
 var __export = (target, all) => {
@@ -36389,8 +36395,117 @@ async function listSerialPorts() {
   return entries.filter((name) => PREFIXES.some((prefix) => name.startsWith(prefix))).map((name) => join3("/dev", name)).sort();
 }
 
+// src/mem.ts
+var ANSI_RE = /\x1b\[[0-9;?]*[ -/]*[@-~]/g;
+function unitToBytes(value, unit) {
+  const v = Number(value);
+  if (!Number.isFinite(v)) return NaN;
+  const u = unit.toLowerCase();
+  if (u === "kb" || u === "k") return v * 1024;
+  if (u === "mb" || u === "m") return v * 1024 * 1024;
+  return v;
+}
+function parseMemoryLine(rawLine) {
+  const line = rawLine.replace(ANSI_RE, "").trimEnd();
+  if (!line.includes("@@@")) return null;
+  const std = /@@@MEM\s+(?:v1\s+)?([A-Za-z_]+)\s+free=(\d+)\s+min=(\d+)\s+maxblk=(\d+)(?:\s+up=(\d+))?/.exec(line);
+  if (std) {
+    const type2 = std[1].toLowerCase();
+    if (type2 !== "sram" && type2 !== "psram") return null;
+    const upTail2 = /(?:^|\s)I\s*\((\d+)\)/.exec(line);
+    return {
+      type: type2,
+      free: Number(std[2]),
+      min: Number(std[3]),
+      maxblk: Number(std[4]),
+      up: std[5] ? Number(std[5]) : upTail2 ? Number(upTail2[1]) : 0,
+      seq: 0
+    };
+  }
+  const isLegacy = /@@@(内存|PSRAM)/.exec(line);
+  if (!isLegacy) return null;
+  const type = isLegacy[1] === "PSRAM" ? "psram" : "sram";
+  const free = /剩余:\s*([\d.]+)\s*(KB|B|K|M)?/i.exec(line);
+  const min = /历史最小:\s*([\d.]+)\s*(KB|B|K|M)?/i.exec(line);
+  const maxblk = /最大块:\s*([\d.]+)\s*(KB|B|K|M)?/i.exec(line);
+  if (!free) return null;
+  const upTail = /(?:^|\s)I\s*\((\d+)\)/.exec(line);
+  return {
+    type,
+    free: unitToBytes(Number(free[1]), free[2] ?? "B"),
+    min: min ? unitToBytes(Number(min[1]), min[2] ?? "B") : NaN,
+    maxblk: maxblk ? unitToBytes(Number(maxblk[1]), maxblk[2] ?? "B") : NaN,
+    up: upTail ? Number(upTail[1]) : 0,
+    seq: 0
+  };
+}
+function isKeyLine(rawLine) {
+  const line = rawLine.replace(ANSI_RE, "").trimEnd();
+  if (line.includes("@@@")) return false;
+  if (/(?:^|[\s>])W\s*\(\d+\)/.test(line) || /(?:^|[\s>])E\s*\(\d+\)/.test(line)) return true;
+  if (/\bERROR\b|\bWARN\b/.test(line)) return true;
+  if (/MemFail|out of memory|OOM|alloc fail|core dump/i.test(line)) return true;
+  return false;
+}
+function parseMemoryLog(rawLog, keyLimit = 100) {
+  const samples = [];
+  const keyLines = [];
+  let unknownMarkers = 0;
+  let seq = 0;
+  for (const rawLine of rawLog.split("\n")) {
+    const sample = parseMemoryLine(rawLine);
+    if (sample) {
+      sample.seq = seq++;
+      samples.push(sample);
+      continue;
+    }
+    const line = rawLine.replace(ANSI_RE, "").trimEnd();
+    if (line.includes("@@@")) {
+      unknownMarkers += 1;
+      continue;
+    }
+    if (keyLines.length < keyLimit && isKeyLine(rawLine)) {
+      const level = /(?:^|[\s>])E\s*\(\d+\)/.test(line) || /\bERROR\b/.test(line) ? "E" : "W";
+      keyLines.push({ level, text: line });
+    }
+  }
+  return { samples, keyLines, unknownMarkers };
+}
+function analyzeType(samples, tightBytes) {
+  if (samples.length === 0) {
+    return { count: 0, latestFree: null, freeMinEver: null, deviceMinLatest: null, maxblkLatest: null, trendPct: null, verdict: null };
+  }
+  const frees = samples.map((s) => s.free);
+  const latestFree = frees[frees.length - 1];
+  const freeMinEver = Math.min(...frees);
+  const last = samples[samples.length - 1];
+  const deviceMinLatest = Number.isFinite(last.min) ? last.min : null;
+  const maxblkLatest = Number.isFinite(last.maxblk) ? last.maxblk : null;
+  let trendPct = null;
+  if (frees.length >= 6) {
+    const half = Math.floor(frees.length / 2);
+    const earlier = frees.slice(0, half);
+    const recent = frees.slice(half);
+    const avg = (a) => a.reduce((x, y) => x + y, 0) / a.length;
+    const base = avg(earlier);
+    trendPct = base > 0 ? Number(((avg(recent) - base) / base * 100).toFixed(1)) : null;
+  }
+  let verdict = "\u6B63\u5E38";
+  if (latestFree < tightBytes) verdict = "\u504F\u7D27";
+  else if (trendPct !== null && trendPct <= -10) verdict = "\u6301\u7EED\u4E0B\u964D";
+  return {
+    count: samples.length,
+    latestFree,
+    freeMinEver,
+    deviceMinLatest,
+    maxblkLatest,
+    trendPct,
+    verdict
+  };
+}
+
 // src/server.ts
-var PLUGIN_VERSION = "0.6.1";
+var PLUGIN_VERSION = "0.7.0";
 var HTML_MIME = "text/html;profile=mcp-app";
 var DIST_DIR = dirname(fileURLToPath(import.meta.url));
 var dataDir = process.env.ZCODE_PLUGIN_DATA?.trim() || join4(DIST_DIR, "data");
@@ -37020,6 +37135,54 @@ server.registerTool(
         port: target,
         baud: baud ?? 115200,
         ...logfile ? { logfile } : {}
+      }
+    };
+  }
+);
+var memCache = /* @__PURE__ */ new Map();
+function parseMonitorLogCached(jobId, dir) {
+  const logPath = join4(dir, "log");
+  if (!existsSync3(logPath)) return { samples: [], keyLines: [], unknownMarkers: 0 };
+  const { statSync, readFileSync: readFileSync2 } = __require("node:fs");
+  const size = statSync(logPath).size;
+  const cached2 = memCache.get(jobId);
+  if (cached2 && cached2.size === size) return cached2.parsed;
+  const parsed = parseMemoryLog(stripAnsi2(readFileSync2(logPath, "utf8")));
+  memCache.set(jobId, { size, parsed });
+  return parsed;
+}
+server.registerTool(
+  "esp32_monitor_memory",
+  {
+    title: "Analyze memory samples from the monitor stream",
+    description: "Parse structured memory samples from a monitor job's serial stream and return curves + analysis. Protocol (device side, one line per sample, units in bytes): `@@@MEM v1 <type> free=<n> min=<n> maxblk=<n> [up=<ms>]` with type sram|psram (extensible). The legacy `@@@\u5185\u5B58/@@@PSRAM | \u5269\u4F59: N KB | \u5386\u53F2\u6700\u5C0F: N B | \u6700\u5927\u5757: N B` lines are parsed too. Returns per-type samples (sram/psram), analysis (latest/min-ever/trend/verdict) and key lines (W/E/alloc-fail).",
+    inputSchema: {
+      jobId: external_exports.string().describe("Monitor job id")
+    },
+    _meta: MODEL_AND_APP
+  },
+  async ({ jobId }) => {
+    const meta3 = await readJobMeta(dataDir, jobId);
+    if (meta3.kind !== "monitor") throw new Error(`${jobId} \u4E0D\u662F\u76D1\u89C6\u4F5C\u4E1A\u3002`);
+    const dir = await jobDir(dataDir, jobId);
+    const parsed = parseMonitorLogCached(jobId, dir);
+    const by = (t) => parsed.samples.filter((s) => s.type === t);
+    const sram = by("sram");
+    const psram = by("psram");
+    const analysis = {
+      sram: analyzeType(sram, 20 * 1024),
+      psram: analyzeType(psram, 512 * 1024)
+    };
+    const summary = `sram: ${analysis.sram.count} \u6837\u672C` + (analysis.sram.latestFree != null ? `\uFF0C\u6700\u65B0 ${Math.round(analysis.sram.latestFree / 1024)} KB\uFF0C\u5224\u5B9A ${analysis.sram.verdict}` : "") + `\uFF1Bpsram: ${analysis.psram.count} \u6837\u672C` + (analysis.psram.latestFree != null ? `\uFF0C\u6700\u65B0 ${Math.round(analysis.psram.latestFree / 1024)} KB\uFF0C\u5224\u5B9A ${analysis.psram.verdict}` : "") + `\uFF1B\u5173\u952E\u65E5\u5FD7 ${parsed.keyLines.length} \u6761\u3002`;
+    return {
+      content: [{ type: "text", text: summary }],
+      structuredContent: {
+        jobId,
+        protocol: "@@@MEM v1 <type> free=<n> min=<n> maxblk=<n> [up=<ms>]",
+        samples: { sram, psram },
+        analysis,
+        keyLines: parsed.keyLines.slice(-100),
+        unknownMarkers: parsed.unknownMarkers
       }
     };
   }

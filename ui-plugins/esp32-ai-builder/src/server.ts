@@ -22,6 +22,7 @@ import {
 import {
   cancelJob,
   getJobChild,
+  jobDir,
   patchJobMeta,
   readJobLogs,
   readJobMeta,
@@ -43,8 +44,9 @@ import {
   stripAnsi,
 } from "./idf";
 import { listSerialPorts } from "./serial";
+import { analyzeType, parseMemoryLog, type ParsedMemoryLog } from "./mem";
 
-const PLUGIN_VERSION = "0.6.1";
+const PLUGIN_VERSION = "0.7.0";
 const HTML_MIME = "text/html;profile=mcp-app";
 const DIST_DIR = dirname(fileURLToPath(import.meta.url));
 
@@ -799,6 +801,71 @@ server.registerTool(
         port: target,
         baud: baud ?? 115200,
         ...(logfile ? { logfile } : {}),
+      },
+    };
+  },
+);
+
+const memCache = new Map<string, { size: number; parsed: ParsedMemoryLog }>();
+
+function parseMonitorLogCached(jobId: string, dir: string): ParsedMemoryLog {
+  const logPath = join(dir, "log");
+  if (!existsSync(logPath)) return { samples: [], keyLines: [], unknownMarkers: 0 };
+  const { statSync, readFileSync } = require("node:fs") as typeof import("node:fs");
+  const size = statSync(logPath).size;
+  const cached = memCache.get(jobId);
+  if (cached && cached.size === size) return cached.parsed;
+  const parsed = parseMemoryLog(stripAnsi(readFileSync(logPath, "utf8")));
+  memCache.set(jobId, { size, parsed });
+  return parsed;
+}
+
+server.registerTool(
+  "esp32_monitor_memory",
+  {
+    title: "Analyze memory samples from the monitor stream",
+    description:
+      "Parse structured memory samples from a monitor job's serial stream and return curves + analysis. " +
+      "Protocol (device side, one line per sample, units in bytes): " +
+      "`@@@MEM v1 <type> free=<n> min=<n> maxblk=<n> [up=<ms>]` with type sram|psram (extensible). " +
+      "The legacy `@@@内存/@@@PSRAM | 剩余: N KB | 历史最小: N B | 最大块: N B` lines are parsed too. " +
+      "Returns per-type samples (sram/psram), analysis (latest/min-ever/trend/verdict) and key lines (W/E/alloc-fail).",
+    inputSchema: {
+      jobId: z.string().describe("Monitor job id"),
+    },
+    _meta: MODEL_AND_APP,
+  },
+  async ({ jobId }) => {
+    const meta = await readJobMeta(dataDir, jobId);
+    if (meta.kind !== "monitor") throw new Error(`${jobId} 不是监视作业。`);
+    const dir = await jobDir(dataDir, jobId);
+    const parsed = parseMonitorLogCached(jobId, dir);
+    const by = (t: "sram" | "psram") => parsed.samples.filter((s) => s.type === t);
+    const sram = by("sram");
+    const psram = by("psram");
+    const analysis = {
+      sram: analyzeType(sram, 20 * 1024),
+      psram: analyzeType(psram, 512 * 1024),
+    };
+    const summary =
+      `sram: ${analysis.sram.count} 样本` +
+      (analysis.sram.latestFree != null
+        ? `，最新 ${Math.round(analysis.sram.latestFree / 1024)} KB，判定 ${analysis.sram.verdict}`
+        : "") +
+      `；psram: ${analysis.psram.count} 样本` +
+      (analysis.psram.latestFree != null
+        ? `，最新 ${Math.round(analysis.psram.latestFree / 1024)} KB，判定 ${analysis.psram.verdict}`
+        : "") +
+      `；关键日志 ${parsed.keyLines.length} 条。`;
+    return {
+      content: [{ type: "text", text: summary }],
+      structuredContent: {
+        jobId,
+        protocol: "@@@MEM v1 <type> free=<n> min=<n> maxblk=<n> [up=<ms>]",
+        samples: { sram, psram },
+        analysis,
+        keyLines: parsed.keyLines.slice(-100),
+        unknownMarkers: parsed.unknownMarkers,
       },
     };
   },

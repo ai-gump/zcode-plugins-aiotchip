@@ -190,6 +190,16 @@ body[data-theme="light"] .lv-D { color: #0969da; }
 .danger-desc { margin: 0 0 10px; }
 .danger-desc code { background: var(--bg); border: 1px solid var(--line); border-radius: 4px; padding: 1px 5px; }
 
+/* 内存检测 tab */
+.mem-grid { display: flex; flex-direction: column; gap: 10px; margin-top: 6px; }
+.mem-card { border: 1px solid var(--line); border-radius: 8px; background: var(--card); padding: 8px 10px; }
+.mem-card-head { display: flex; align-items: center; gap: 8px; margin-bottom: 4px; }
+.mem-tag { font-weight: 700; font-size: 12px; padding: 1px 8px; border-radius: 999px; }
+.mem-tag.sram { background: rgba(63,185,80,0.15); color: #3fb950; }
+.mem-tag.psram { background: rgba(88,166,255,0.15); color: #58a6ff; }
+.mem-chart { width: 100%; height: 150px; display: block; }
+.mem-keylog { max-height: 200px; overflow-y: auto; margin: 4px 0 0; }
+
     </style>
   </head>
   <body data-theme="light">
@@ -197,6 +207,7 @@ body[data-theme="light"] .lv-D { color: #0969da; }
       <button class="tab active" data-tab="chip" role="tab">芯片库</button>
       <button class="tab" data-tab="pipeline" role="tab">构建管线</button>
       <button class="tab" data-tab="monitor" role="tab">串口监视</button>
+      <button class="tab" data-tab="mem" role="tab">内存检测</button>
     </header>
 
     <main>
@@ -235,6 +246,31 @@ body[data-theme="light"] .lv-D { color: #0969da; }
         </div>
         <div id="job-head" class="muted" hidden></div>
         <pre id="job-log" hidden></pre>
+      </section>
+
+      <!-- 内存检测 -->
+      <section id="tab-mem" class="page" hidden>
+        <div class="row buttons">
+          <span id="mem-status" class="muted">等待监视数据…（先在「串口监视」开始监视）</span>
+        </div>
+        <div class="mem-grid">
+          <div class="mem-card">
+            <div class="mem-card-head"><span class="mem-tag sram">SRAM</span><span id="mem-sram-summary" class="muted"></span></div>
+            <canvas id="mem-chart-sram" class="mem-chart"></canvas>
+          </div>
+          <div class="mem-card">
+            <div class="mem-card-head"><span class="mem-tag psram">PSRAM</span><span id="mem-psram-summary" class="muted"></span></div>
+            <canvas id="mem-chart-psram" class="mem-chart"></canvas>
+          </div>
+          <div class="mem-card">
+            <div class="mem-card-head"><span>分析</span></div>
+            <div id="mem-analysis"></div>
+          </div>
+          <div class="mem-card">
+            <div class="mem-card-head"><span>关键日志（W/E 与内存异常）</span><span id="mem-keycount" class="muted"></span></div>
+            <pre id="mem-keylog" class="mem-keylog"></pre>
+          </div>
+        </div>
       </section>
 
       <!-- 串口监视 -->
@@ -26973,6 +27009,7 @@ container holding the app. Specify either width or maxWidth, and either height o
     pollTimer = setInterval(() => {
       pollJob();
       pollMonitor();
+      pollMemory();
     }, 1e3);
   }
   function stopPolling() {
@@ -27579,6 +27616,109 @@ ${truncated}` }]
       $("btn-monitor-stop").disabled = true;
     }
   }
+  function fmtBytes(b2) {
+    if (!Number.isFinite(b2)) return "\u2013";
+    return b2 >= 1048576 ? `${(b2 / 1048576).toFixed(2)} MB` : `${(b2 / 1024).toFixed(1)} KB`;
+  }
+  function drawMemChart(canvas, samples) {
+    const dpr = window.devicePixelRatio || 1;
+    const w2 = canvas.clientWidth || 300;
+    const h2 = canvas.clientHeight || 150;
+    canvas.width = w2 * dpr;
+    canvas.height = h2 * dpr;
+    const ctx = canvas.getContext("2d");
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    ctx.clearRect(0, 0, w2, h2);
+    if (!samples.length) {
+      ctx.fillStyle = "#8b949e";
+      ctx.font = "12px sans-serif";
+      ctx.fillText("\u6682\u65E0\u6837\u672C\uFF08\u7B49\u5F85\u8BBE\u5907\u6309\u534F\u8BAE\u6253\u5370 @@@MEM \u6216 @@@\u5185\u5B58/@@@PSRAM \u884C\uFF09", 8, 20);
+      return;
+    }
+    const vals = samples.flatMap((x2) => [x2.free, x2.maxblk].filter(Number.isFinite));
+    let lo = Math.min(...vals);
+    let hi = Math.max(...vals);
+    if (lo === hi) {
+      lo *= 0.9;
+      hi *= 1.1;
+    }
+    const padL = 56, padR = 10, padT = 10, padB = 18;
+    const X = (i2) => padL + i2 / Math.max(1, samples.length - 1) * (w2 - padL - padR);
+    const Y = (v) => padT + (1 - (v - lo) / (hi - lo)) * (h2 - padT - padB);
+    ctx.strokeStyle = "rgba(128,128,128,0.25)";
+    ctx.lineWidth = 1;
+    ctx.fillStyle = "#8b949e";
+    ctx.font = "10px sans-serif";
+    for (let g = 0; g <= 3; g++) {
+      const v = lo + (hi - lo) * g / 3;
+      const y2 = Y(v);
+      ctx.beginPath();
+      ctx.moveTo(padL, y2);
+      ctx.lineTo(w2 - padR, y2);
+      ctx.stroke();
+      ctx.fillText(fmtBytes(v), 4, y2 + 3);
+    }
+    const devMin = samples[samples.length - 1].min;
+    if (Number.isFinite(devMin) && devMin >= lo && devMin <= hi) {
+      ctx.strokeStyle = "#f85149";
+      ctx.setLineDash([4, 4]);
+      ctx.beginPath();
+      ctx.moveTo(padL, Y(devMin));
+      ctx.lineTo(w2 - padR, Y(devMin));
+      ctx.stroke();
+      ctx.setLineDash([]);
+    }
+    const line = (get, color, dash) => {
+      ctx.strokeStyle = color;
+      ctx.lineWidth = 1.6;
+      if (dash) ctx.setLineDash([5, 4]);
+      ctx.beginPath();
+      samples.forEach((s, i2) => i2 ? ctx.lineTo(X(i2), Y(get(s))) : ctx.moveTo(X(i2), Y(get(s))));
+      ctx.stroke();
+      ctx.setLineDash([]);
+    };
+    line((x2) => x2.maxblk, "#58a6ff", true);
+    line((x2) => x2.free, "#3fb950", false);
+    ctx.fillStyle = "#8b949e";
+    const fUp = (ms) => ms >= 1e3 ? `${(ms / 1e3).toFixed(0)}s` : `${ms}ms`;
+    ctx.fillText(`up ${fUp(samples[0].up)}`, padL, h2 - 5);
+    ctx.fillText(`up ${fUp(samples[samples.length - 1].up)}`, w2 - padR - 70, h2 - 5);
+  }
+  function verdictHtml(v) {
+    if (!v) return "\u2013";
+    const cls = v === "\u6B63\u5E38" ? "lv-I" : v === "\u504F\u7D27" ? "lv-W" : "lv-E";
+    return `<span class="${cls}" style="font-weight:600">${v}</span>`;
+  }
+  function renderMemory(data) {
+    const a2 = data.analysis ?? {};
+    $("mem-status").textContent = `\u5DF2\u91C7\u96C6\uFF1ASRAM ${a2.sram?.count ?? 0} \u6837\u672C \xB7 PSRAM ${a2.psram?.count ?? 0} \u6837\u672C` + (data.unknownMarkers ? ` \xB7 \u672A\u8BC6\u522B\u7684 @@@ \u884C ${data.unknownMarkers}\uFF08\u534F\u8BAE\u4E0D\u5339\u914D\uFF1F\uFF09` : "");
+    const sum = (an) => an.latestFree == null ? "\u6682\u65E0\u6837\u672C" : `\u6700\u65B0 ${fmtBytes(an.latestFree)} \xB7 \u5224\u5B9A ${an.verdict}` + (an.trendPct != null ? ` \xB7 \u8D8B\u52BF ${an.trendPct}%` : "");
+    $("mem-sram-summary").textContent = sum(a2.sram ?? {});
+    $("mem-psram-summary").textContent = sum(a2.psram ?? {});
+    drawMemChart($("mem-chart-sram"), data.samples?.sram ?? []);
+    drawMemChart($("mem-chart-psram"), data.samples?.psram ?? []);
+    const row = (name, an) => an.latestFree == null ? `<tr><td>${name}</td><td colspan="6" class="muted">\u6682\u65E0\u6837\u672C</td></tr>` : `<tr><td>${name}</td><td>${fmtBytes(an.latestFree)}</td><td>${fmtBytes(an.freeMinEver)}</td><td>${fmtBytes(an.deviceMinLatest)}</td><td>${fmtBytes(an.maxblkLatest)}</td><td>${an.trendPct ?? "\u2013"}%</td><td>${verdictHtml(an.verdict)}</td></tr>`;
+    $("mem-analysis").innerHTML = `<table class="spec">
+    <tr><td></td><td>\u6700\u65B0\u5269\u4F59</td><td>\u89C2\u6D4B\u6700\u4F4E</td><td>\u8BBE\u5907\u5386\u53F2\u6700\u5C0F</td><td>\u6700\u5927\u8FDE\u7EED\u5757</td><td>\u8D8B\u52BF</td><td>\u5224\u5B9A</td></tr>
+    ${row("SRAM", a2.sram ?? {})}${row("PSRAM", a2.psram ?? {})}</table>`;
+    const keys = data.keyLines ?? [];
+    $("mem-keycount").textContent = `${keys.length} \u6761`;
+    $("mem-keylog").textContent = keys.map((k2) => k2.text).join("\n");
+  }
+  var memBusy = false;
+  async function pollMemory() {
+    if (memBusy || !monitorJob) return;
+    const page = document.getElementById("tab-mem");
+    if (!page || page.hidden) return;
+    memBusy = true;
+    try {
+      renderMemory(await call("esp32_monitor_memory", { jobId: monitorJob }));
+    } catch (error62) {
+      $("mem-status").textContent = `\u8BFB\u53D6\u5931\u8D25\uFF1A${error62.message}`;
+    } finally {
+      memBusy = false;
+    }
+  }
   function statusText(status) {
     return { running: "\u8FD0\u884C\u4E2D", succeeded: "\u6210\u529F", failed: "\u5931\u8D25", cancelled: "\u5DF2\u53D6\u6D88", interrupted: "\u5DF2\u4E2D\u65AD" }[status] ?? status;
   }
@@ -27597,6 +27737,7 @@ ${truncated}` }]
         refreshEnv();
         loadProjects();
       }
+      if (tab.dataset.tab === "mem") pollMemory();
     };
   }
   app.onteardown = () => {

@@ -17,11 +17,26 @@ End-to-end ESP32-S3 development for ZCode: chip catalog, ESP-IDF 5.5 environment
 | `esp32_job_status` / `esp32_job_logs` / `esp32_job_cancel` | Job management with cursor-based incremental logs. |
 | `esp32_monitor_start/read/send/stop` | Serial monitor (pyserial helper from the IDF python env), one port at a time. |
 | `esp32_uart_commands_get/set` | Panel-customizable UART command buttons (persisted in the plugin data directory, max 100). |
+| `esp32_monitor_memory` | Parses memory samples from the monitor stream (standard/legacy protocol) into curve data and trend analysis. |
 | SDK config | `esp32_sdkconfig_get/set` read `sdkconfig.json` and write `sdkconfig.defaults` (+ patch active `sdkconfig`). |
 
 The **ESP32 AI 开发台** panel (MCP Apps surface) exposes the same loop with three tabs: chip library (with "bring selection into the conversation"), build pipeline (env / set-target / build / flash with live logs), and serial monitor with a custom command sidebar and a terminal-style send bar. Build and flash results also render an inline progress card in the conversation.
 
 Slash commands: `/esp32:new-project`, `/esp32:build`, `/esp32:flash`, `/esp32:monitor`. Skills: `esp32-s3-overview` (chip Q&A), `esp32-s3-workflow` (full-loop methodology).
+
+## Memory log protocol
+
+The device prints one sample per line (units in **bytes**); the plugin parses it into curves and structured analysis:
+
+```text
+@@@MEM v1 <type> free=<n> min=<n> maxblk=<n> [up=<ms>]
+# example
+@@@MEM v1 sram  free=50176 min=41739 maxblk=20480 up=2279
+```
+
+- `type`: `sram` / `psram` (extensible); `min` is the device-side historic minimum; `up` is uptime in ms (optional)
+- **Legacy compatibility**: the `@@@内存/@@@PSRAM | 剩余: N KB | 历史最小: N B | 最大块: N B` lines are parsed automatically (KB/B units normalized, uptime taken from the `I (nnnn)` prefix)
+- Agent access: call `esp32_monitor_memory { jobId }` for structured samples/trends — no need to eyeball logs
 
 ## Requirements
 

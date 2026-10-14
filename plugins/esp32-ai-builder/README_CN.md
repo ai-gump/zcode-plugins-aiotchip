@@ -17,11 +17,27 @@ English documentation: [README.md](README.md)。
 | `esp32_job_status` / `esp32_job_logs` / `esp32_job_cancel` | 作业管理，日志按字节游标增量读取。 |
 | `esp32_monitor_start/read/send/stop` | 串口监视（IDF python 环境的 pyserial 助手），同串口同时仅一个监视作业。 |
 | `esp32_uart_commands_get/set` | 面板自定义 UART 命令按钮（持久化到插件数据目录，最多 100 条）。 |
+| `esp32_monitor_memory` | 解析监视流中的内存样本（标准/旧格式协议），返回曲线数据与趋势分析。 |
 | sdkconfig | `esp32_sdkconfig_get/set` 读 `sdkconfig.json`、写 `sdkconfig.defaults`（并补丁活动的 `sdkconfig`）。 |
 
 **ESP32 AI 开发台**面板（MCP Apps surface）以三个 tab 承载同一回路：芯片库（可"把选型信息带入对话"）、构建管线（环境/set-target/编译/烧录 + 实时日志）、串口监视（右侧自定义命令栏 + 底部终端式发送条）。编译和烧录的工具结果还会在对话里渲染内联进度卡。
 
 斜杠命令：`/esp32:new-project`、`/esp32:build`、`/esp32:flash`、`/esp32:monitor`。技能：`esp32-s3-overview`（芯片问答）、`esp32-s3-workflow`（全流程方法论）。
+
+## 内存日志协议
+
+设备按固定节奏打印一行一个样本（单位一律**字节**），插件解析后绘制曲线并输出结构化分析：
+
+```text
+@@@MEM v1 <type> free=<n> min=<n> maxblk=<n> [up=<ms>]
+# 示例
+@@@MEM v1 sram  free=50176 min=41739 maxblk=20480 up=2279
+@@@MEM v1 psram free=7840568 min=7709912 maxblk=7733248 up=2279
+```
+
+- `type`：`sram` / `psram`（可扩展）；`min` 为设备侧历史最小；`up` 为开机毫秒（可选）
+- **旧格式兼容**：`@@@内存 | … | 剩余: N KB | 历史最小: N B | 最大块: N B` 与 `@@@PSRAM | …` 自动解析（KB/B 混用自动折算，开机毫秒取 `I (nnnn)` 前缀）
+- Agent 结构化读取：调用 `esp32_monitor_memory { jobId }`（返回样本序列、趋势与判定，无需肉眼读日志）
 
 ## 依赖要求
 

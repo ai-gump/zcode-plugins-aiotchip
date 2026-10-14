@@ -13,6 +13,7 @@
       <button class="tab active" data-tab="chip" role="tab">芯片库</button>
       <button class="tab" data-tab="pipeline" role="tab">构建管线</button>
       <button class="tab" data-tab="monitor" role="tab">串口监视</button>
+      <button class="tab" data-tab="mem" role="tab">内存检测</button>
     </header>
 
     <main>
@@ -51,6 +52,31 @@
         </div>
         <div id="job-head" class="muted" hidden></div>
         <pre id="job-log" hidden></pre>
+      </section>
+
+      <!-- 内存检测 -->
+      <section id="tab-mem" class="page" hidden>
+        <div class="row buttons">
+          <span id="mem-status" class="muted">等待监视数据…（先在「串口监视」开始监视）</span>
+        </div>
+        <div class="mem-grid">
+          <div class="mem-card">
+            <div class="mem-card-head"><span class="mem-tag sram">SRAM</span><span id="mem-sram-summary" class="muted"></span></div>
+            <canvas id="mem-chart-sram" class="mem-chart"></canvas>
+          </div>
+          <div class="mem-card">
+            <div class="mem-card-head"><span class="mem-tag psram">PSRAM</span><span id="mem-psram-summary" class="muted"></span></div>
+            <canvas id="mem-chart-psram" class="mem-chart"></canvas>
+          </div>
+          <div class="mem-card">
+            <div class="mem-card-head"><span>分析</span></div>
+            <div id="mem-analysis"></div>
+          </div>
+          <div class="mem-card">
+            <div class="mem-card-head"><span>关键日志（W/E 与内存异常）</span><span id="mem-keycount" class="muted"></span></div>
+            <pre id="mem-keylog" class="mem-keylog"></pre>
+          </div>
+        </div>
       </section>
 
       <!-- 串口监视 -->

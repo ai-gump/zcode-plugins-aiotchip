@@ -41,6 +41,7 @@ function startPolling() {
   pollTimer = setInterval(() => {
     pollJob();
     pollMonitor();
+    pollMemory();
   }, 1000);
 }
 function stopPolling() {
@@ -733,6 +734,120 @@ async function pollMonitor() {
   }
 }
 
+/* ---------- 内存检测 ---------- */
+
+function fmtBytes(b) {
+  if (!Number.isFinite(b)) return "–";
+  return b >= 1048576 ? `${(b / 1048576).toFixed(2)} MB` : `${(b / 1024).toFixed(1)} KB`;
+}
+
+function verdictBadge(v) {
+  if (!v) return "–";
+  const cls = v === "正常" ? "lv-I" : v === "偏紧" ? "lv-W" : "lv-E";
+  return `<span class="${cls}" style="font-weight:600">${v}</span>`;
+}
+
+function drawMemChart(canvas, samples) {
+  const dpr = window.devicePixelRatio || 1;
+  const w = canvas.clientWidth || 300;
+  const h = canvas.clientHeight || 150;
+  canvas.width = w * dpr;
+  canvas.height = h * dpr;
+  const ctx = canvas.getContext("2d");
+  ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+  ctx.clearRect(0, 0, w, h);
+  if (!samples.length) {
+    ctx.fillStyle = "#8b949e";
+    ctx.font = "12px sans-serif";
+    ctx.fillText("暂无样本（等待设备按协议打印 @@@MEM 或 @@@内存/@@@PSRAM 行）", 8, 20);
+    return;
+  }
+  const vals = samples.flatMap((x) => [x.free, x.maxblk].filter(Number.isFinite));
+  let lo = Math.min(...vals);
+  let hi = Math.max(...vals);
+  if (lo === hi) { lo *= 0.9; hi *= 1.1; }
+  const padL = 56, padR = 10, padT = 10, padB = 18;
+  const X = (i) => padL + (i / Math.max(1, samples.length - 1)) * (w - padL - padR);
+  const Y = (v) => padT + (1 - (v - lo) / (hi - lo)) * (h - padT - padB);
+  ctx.strokeStyle = "rgba(128,128,128,0.25)";
+  ctx.lineWidth = 1;
+  ctx.fillStyle = "#8b949e";
+  ctx.font = "10px sans-serif";
+  for (let g = 0; g <= 3; g++) {
+    const v = lo + ((hi - lo) * g) / 3;
+    const y = Y(v);
+    ctx.beginPath(); ctx.moveTo(padL, y); ctx.lineTo(w - padR, y); ctx.stroke();
+    ctx.fillText(fmtBytes(v), 4, y + 3);
+  }
+  const devMin = samples[samples.length - 1].min;
+  if (Number.isFinite(devMin) && devMin >= lo && devMin <= hi) {
+    ctx.strokeStyle = "#f85149";
+    ctx.setLineDash([4, 4]);
+    ctx.beginPath(); ctx.moveTo(padL, Y(devMin)); ctx.lineTo(w - padR, Y(devMin)); ctx.stroke();
+    ctx.setLineDash([]);
+  }
+  const line = (get, color, dash) => {
+    ctx.strokeStyle = color; ctx.lineWidth = 1.6;
+    if (dash) ctx.setLineDash([5, 4]);
+    ctx.beginPath();
+    samples.forEach((s, i) => (i ? ctx.lineTo(X(i), Y(get(s))) : ctx.moveTo(X(i), Y(get(s)))));
+    ctx.stroke();
+    ctx.setLineDash([]);
+  };
+  line((x) => x.maxblk, "#58a6ff", true);
+  line((x) => x.free, "#3fb950", false);
+  ctx.fillStyle = "#8b949e";
+  const fUp = (ms) => (ms >= 1000 ? `${(ms / 1000).toFixed(0)}s` : `${ms}ms`);
+  ctx.fillText(`up ${fUp(samples[0].up)}`, padL, h - 5);
+  ctx.fillText(`up ${fUp(samples[samples.length - 1].up)}`, w - padR - 70, h - 5);
+}
+
+function verdictHtml(v) {
+  if (!v) return "–";
+  const cls = v === "正常" ? "lv-I" : v === "偏紧" ? "lv-W" : "lv-E";
+  return `<span class="${cls}" style="font-weight:600">${v}</span>`;
+}
+
+function renderMemory(data) {
+  const a = data.analysis ?? {};
+  $("mem-status").textContent =
+    `已采集：SRAM ${a.sram?.count ?? 0} 样本 · PSRAM ${a.psram?.count ?? 0} 样本` +
+    (data.unknownMarkers ? ` · 未识别的 @@@ 行 ${data.unknownMarkers}（协议不匹配？）` : "");
+  const sum = (an) =>
+    an.latestFree == null
+      ? "暂无样本"
+      : `最新 ${fmtBytes(an.latestFree)} · 判定 ${an.verdict}` + (an.trendPct != null ? ` · 趋势 ${an.trendPct}%` : "");
+  $("mem-sram-summary").textContent = sum(a.sram ?? {});
+  $("mem-psram-summary").textContent = sum(a.psram ?? {});
+  drawMemChart($("mem-chart-sram"), data.samples?.sram ?? []);
+  drawMemChart($("mem-chart-psram"), data.samples?.psram ?? []);
+  const row = (name, an) =>
+    an.latestFree == null
+      ? `<tr><td>${name}</td><td colspan="6" class="muted">暂无样本</td></tr>`
+      : `<tr><td>${name}</td><td>${fmtBytes(an.latestFree)}</td><td>${fmtBytes(an.freeMinEver)}</td><td>${fmtBytes(an.deviceMinLatest)}</td><td>${fmtBytes(an.maxblkLatest)}</td><td>${an.trendPct ?? "–"}%</td><td>${verdictHtml(an.verdict)}</td></tr>`;
+  $("mem-analysis").innerHTML = `<table class="spec">
+    <tr><td></td><td>最新剩余</td><td>观测最低</td><td>设备历史最小</td><td>最大连续块</td><td>趋势</td><td>判定</td></tr>
+    ${row("SRAM", a.sram ?? {})}${row("PSRAM", a.psram ?? {})}</table>`;
+  const keys = data.keyLines ?? [];
+  $("mem-keycount").textContent = `${keys.length} 条`;
+  $("mem-keylog").textContent = keys.map((k) => k.text).join("\n");
+}
+
+let memBusy = false;
+async function pollMemory() {
+  if (memBusy || !monitorJob) return;
+  const page = document.getElementById("tab-mem");
+  if (!page || page.hidden) return;
+  memBusy = true;
+  try {
+    renderMemory(await call("esp32_monitor_memory", { jobId: monitorJob }));
+  } catch (error) {
+    $("mem-status").textContent = `读取失败：${error.message}`;
+  } finally {
+    memBusy = false;
+  }
+}
+
 /* ---------- 公共 ---------- */
 
 function statusText(status) {
@@ -755,6 +870,7 @@ for (const tab of document.querySelectorAll(".tab")) {
       refreshEnv();
       loadProjects();
     }
+    if (tab.dataset.tab === "mem") pollMemory();
   };
 }
 
