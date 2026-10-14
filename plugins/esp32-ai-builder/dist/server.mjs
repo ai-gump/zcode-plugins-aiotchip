@@ -36390,7 +36390,7 @@ async function listSerialPorts() {
 }
 
 // src/server.ts
-var PLUGIN_VERSION = "0.5.2";
+var PLUGIN_VERSION = "0.6.0";
 var HTML_MIME = "text/html;profile=mcp-app";
 var DIST_DIR = dirname(fileURLToPath(import.meta.url));
 var dataDir = process.env.ZCODE_PLUGIN_DATA?.trim() || join4(DIST_DIR, "data");
@@ -37157,7 +37157,8 @@ var UartCommandSchema = external_exports.object({
   label: external_exports.string().min(1).max(64).describe("\u6309\u94AE\u663E\u793A\u540D"),
   text: external_exports.string().min(1).max(512).describe("\u53D1\u9001\u5230\u4E32\u53E3\u7684\u6587\u672C"),
   newline: external_exports.boolean().optional().describe("\u672B\u5C3E\u8FFD\u52A0\u6362\u884C\uFF08\u9ED8\u8BA4 true\uFF09"),
-  group: external_exports.string().max(32).optional().describe("\u5206\u7EC4\u540D\uFF08\u53EF\u9009\uFF0C\u9ED8\u8BA4\u5F52\u5165\u201C\u547D\u4EE4\u201D\uFF09")
+  group: external_exports.string().max(32).optional().describe("\u5206\u7EC4\u540D\uFF08\u53EF\u9009\uFF0C\u9ED8\u8BA4\u5F52\u5165\u201C\u547D\u4EE4\u201D\uFF09"),
+  danger: external_exports.boolean().optional().describe("\u5371\u9669\u64CD\u4F5C\uFF1A\u70B9\u51FB\u65F6\u9700\u8981\u9762\u677F\u5F39\u7A97\u786E\u8BA4")
 });
 server.registerTool(
   "esp32_uart_commands_get",
@@ -37197,7 +37198,8 @@ server.registerTool(
       label: c.label,
       text: c.text,
       newline: c.newline ?? true,
-      ...c.group ? { group: c.group } : {}
+      ...c.group ? { group: c.group } : {},
+      ...c.danger ? { danger: true } : {}
     }));
     await writeFileText(uartCommandsFile(), JSON.stringify(normalized, null, 2) + "\n");
     return {

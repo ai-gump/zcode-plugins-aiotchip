@@ -177,3 +177,8 @@ body[data-theme="light"] .lv-D { color: #0969da; }
 }
 .dir-item:hover { background: var(--line); }
 .dir-btns { margin-top: 4px; }
+
+.cmd-dot.danger { background: #f85149; }
+.cmd-btn.danger-cmd span { color: #f85149; }
+.danger-desc { margin: 0 0 10px; }
+.danger-desc code { background: var(--bg); border: 1px solid var(--line); border-radius: 4px; padding: 1px 5px; }

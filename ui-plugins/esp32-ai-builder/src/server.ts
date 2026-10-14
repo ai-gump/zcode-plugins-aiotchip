@@ -44,7 +44,7 @@ import {
 } from "./idf";
 import { listSerialPorts } from "./serial";
 
-const PLUGIN_VERSION = "0.5.2";
+const PLUGIN_VERSION = "0.6.0";
 const HTML_MIME = "text/html;profile=mcp-app";
 const DIST_DIR = dirname(fileURLToPath(import.meta.url));
 
@@ -964,6 +964,7 @@ const UartCommandSchema = z.object({
   text: z.string().min(1).max(512).describe("发送到串口的文本"),
   newline: z.boolean().optional().describe("末尾追加换行（默认 true）"),
   group: z.string().max(32).optional().describe("分组名（可选，默认归入“命令”）"),
+  danger: z.boolean().optional().describe("危险操作：点击时需要面板弹窗确认"),
 });
 
 server.registerTool(
@@ -1011,6 +1012,7 @@ server.registerTool(
       text: c.text,
       newline: c.newline ?? true,
       ...(c.group ? { group: c.group } : {}),
+      ...(c.danger ? { danger: true } : {}),
     }));
     await writeFileText(uartCommandsFile(), JSON.stringify(normalized, null, 2) + "\n");
     return {

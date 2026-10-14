@@ -467,9 +467,10 @@ function renderCommands() {
       btn.className = "cmd-btn";
       btn.title = `${item.text}${item.newline !== false ? "\\n" : ""}（双击编辑）`;
       const dot = document.createElement("span");
-      dot.className = "cmd-dot";
+      dot.className = item.danger ? "cmd-dot danger" : "cmd-dot";
       const label = document.createElement("span");
       label.textContent = item.label;
+      if (item.danger) btn.classList.add("danger-cmd");
       btn.append(dot, label);
       // 单击发送（延迟以区分双击）；双击进入编辑态
       btn.onclick = () => {
@@ -506,6 +507,19 @@ function sendCommand(item) {
     toast("先开始监视，再发送命令");
     return;
   }
+  if (item.danger) {
+    pendingDanger = item;
+    $("danger-desc").innerHTML =
+      `即将执行 <code>${escapeHtml(item.label)}</code>，将通过串口发送 <code>${escapeHtml(item.text)}</code>。确认继续？`;
+    $("danger-modal").hidden = false;
+    return;
+  }
+  performSend(item);
+}
+
+let pendingDanger = null;
+
+function performSend(item) {
   guard(async () => {
     await call("esp32_monitor_send", {
       jobId: monitorJob,
@@ -515,6 +529,17 @@ function sendCommand(item) {
     toast(`已发送 ${item.label}`);
   });
 }
+
+$("danger-cancel").onclick = () => {
+  pendingDanger = null;
+  $("danger-modal").hidden = true;
+};
+$("danger-ok").onclick = () => {
+  const item = pendingDanger;
+  pendingDanger = null;
+  $("danger-modal").hidden = true;
+  if (item) performSend(item);
+};
 
 function openCmdForm(index) {
   editIndex = index;

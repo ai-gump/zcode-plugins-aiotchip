@@ -185,6 +185,11 @@ body[data-theme="light"] .lv-D { color: #0969da; }
 .dir-item:hover { background: var(--line); }
 .dir-btns { margin-top: 4px; }
 
+.cmd-dot.danger { background: #f85149; }
+.cmd-btn.danger-cmd span { color: #f85149; }
+.danger-desc { margin: 0 0 10px; }
+.danger-desc code { background: var(--bg); border: 1px solid var(--line); border-radius: 4px; padding: 1px 5px; }
+
     </style>
   </head>
   <body data-theme="light">
@@ -301,6 +306,16 @@ body[data-theme="light"] .lv-D { color: #0969da; }
           <span style="flex: 1"></span>
           <button id="dir-cancel" type="button">取消</button>
           <button id="dir-ok" class="primary" type="button">选此文件夹并扫描</button>
+        </div>
+      </div>
+    </div>
+    <div id="danger-modal" class="modal-overlay" hidden>
+      <div class="modal-card">
+        <p><strong style="color: #f85149;">⚠ 危险操作</strong></p>
+        <p id="danger-desc" class="danger-desc"></p>
+        <div class="modal-btns">
+          <button id="danger-cancel">取消</button>
+          <button id="danger-ok" class="primary">确认执行</button>
         </div>
       </div>
     </div>
@@ -27326,9 +27341,10 @@ container holding the app. Specify either width or maxWidth, and either height o
         btn.className = "cmd-btn";
         btn.title = `${item.text}${item.newline !== false ? "\\n" : ""}\uFF08\u53CC\u51FB\u7F16\u8F91\uFF09`;
         const dot = document.createElement("span");
-        dot.className = "cmd-dot";
+        dot.className = item.danger ? "cmd-dot danger" : "cmd-dot";
         const label = document.createElement("span");
         label.textContent = item.label;
+        if (item.danger) btn.classList.add("danger-cmd");
         btn.append(dot, label);
         btn.onclick = () => {
           clearTimeout(pendingSendTimer);
@@ -27362,6 +27378,16 @@ container holding the app. Specify either width or maxWidth, and either height o
       toast("\u5148\u5F00\u59CB\u76D1\u89C6\uFF0C\u518D\u53D1\u9001\u547D\u4EE4");
       return;
     }
+    if (item.danger) {
+      pendingDanger = item;
+      $("danger-desc").innerHTML = `\u5373\u5C06\u6267\u884C <code>${escapeHtml(item.label)}</code>\uFF0C\u5C06\u901A\u8FC7\u4E32\u53E3\u53D1\u9001 <code>${escapeHtml(item.text)}</code>\u3002\u786E\u8BA4\u7EE7\u7EED\uFF1F`;
+      $("danger-modal").hidden = false;
+      return;
+    }
+    performSend(item);
+  }
+  var pendingDanger = null;
+  function performSend(item) {
     guard(async () => {
       await call("esp32_monitor_send", {
         jobId: monitorJob,
@@ -27371,6 +27397,16 @@ container holding the app. Specify either width or maxWidth, and either height o
       toast(`\u5DF2\u53D1\u9001 ${item.label}`);
     });
   }
+  $("danger-cancel").onclick = () => {
+    pendingDanger = null;
+    $("danger-modal").hidden = true;
+  };
+  $("danger-ok").onclick = () => {
+    const item = pendingDanger;
+    pendingDanger = null;
+    $("danger-modal").hidden = true;
+    if (item) performSend(item);
+  };
   function openCmdForm(index) {
     editIndex = index;
     const item = index >= 0 ? uartCommands[index] : null;
