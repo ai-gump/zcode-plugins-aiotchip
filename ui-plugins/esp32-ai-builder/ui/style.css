@@ -81,7 +81,7 @@ pre {
   padding: 6px 8px; font-weight: 600; font-size: 12px; color: var(--muted);
   border-bottom: 1px solid var(--line);
 }
-#cmd-add { padding: 0 8px; line-height: 1.4; }
+#cmd-add, #cmd-refresh { padding: 0 8px; line-height: 1.4; }
 #cmd-list { overflow-y: auto; flex: 1; padding: 4px; }
 .cmd-empty { padding: 6px; }
 .cmd-group { color: var(--muted); font-size: 11px; padding: 6px 4px 2px; }

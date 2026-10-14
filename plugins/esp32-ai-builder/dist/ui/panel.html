@@ -88,7 +88,7 @@ pre {
   padding: 6px 8px; font-weight: 600; font-size: 12px; color: var(--muted);
   border-bottom: 1px solid var(--line);
 }
-#cmd-add { padding: 0 8px; line-height: 1.4; }
+#cmd-add, #cmd-refresh { padding: 0 8px; line-height: 1.4; }
 #cmd-list { overflow-y: auto; flex: 1; padding: 4px; }
 .cmd-empty { padding: 6px; }
 .cmd-group { color: var(--muted); font-size: 11px; padding: 6px 4px 2px; }
@@ -260,8 +260,11 @@ body[data-theme="light"] .lv-D { color: #0969da; }
           </div>
           <aside id="cmd-panel">
             <div class="cmd-head">
-              <span>UART 命令</span>
-              <button id="cmd-add" title="添加命令">＋</button>
+              <span>常见命令</span>
+              <span class="cmd-head-btns">
+                <button id="cmd-refresh" title="重新加载命令列表">↻</button>
+                <button id="cmd-add" title="添加命令">＋</button>
+              </span>
             </div>
             <div id="cmd-list"><div class="muted cmd-empty">加载中…</div></div>
             <div id="cmd-form" hidden>
@@ -27378,6 +27381,7 @@ container holding the app. Specify either width or maxWidth, and either height o
     $("cmd-form").hidden = false;
     $("cmd-label").focus();
   }
+  $("cmd-refresh").onclick = () => guard(() => loadCommands());
   $("cmd-add").onclick = () => openCmdForm(-1);
   $("cmd-cancel").onclick = () => {
     editIndex = -1;

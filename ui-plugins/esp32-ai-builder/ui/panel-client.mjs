@@ -527,6 +527,7 @@ function openCmdForm(index) {
   $("cmd-label").focus();
 }
 
+$("cmd-refresh").onclick = () => guard(() => loadCommands());
 $("cmd-add").onclick = () => openCmdForm(-1);
 $("cmd-cancel").onclick = () => {
   editIndex = -1;
